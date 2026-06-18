@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Benefon Bot{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <style>
+        body { background-color: #f8f9fa; }
+        .sidebar { min-height: 100vh; background-color: #343a40; }
+        .sidebar a { color: #fff; text-decoration: none; padding: 10px 15px; display: block; }
+        .sidebar a:hover { background-color: #495057; }
+        .main-content { padding: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Sidebar -->
+            <nav class="col-md-2 d-md-block sidebar">
+                <h5 class="text-white p-3">Benefon Bot</h5>
+                <a href="/dashboard?user_id={{ user.telegram_id }}"><i class="bi bi-speedometer2"></i> Дашборд</a>
+                <a href="/tasks?user_id={{ user.telegram_id }}"><i class="bi bi-list-task"></i> Задачи</a>
+                <a href="/reports?user_id={{ user.telegram_id }}"><i class="bi bi-file-earmark-text"></i> Отчёты</a>
+                <a href="/logout"><i class="bi bi-box-arrow-right"></i> Выход</a>
+            </nav>
+
+            <!-- Main content -->
+            <main class="col-md-10 main-content">
+                {% block content %}{% endblock %}
+            </main>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

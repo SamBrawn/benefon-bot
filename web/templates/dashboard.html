@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+
+{% block title %}Дашборд - Benefon Bot{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h2>Дашборд</h2>
+        <p class="text-muted">Добро пожаловать, {{ user.full_name }}!</p>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-3">
+        <div class="card text-white bg-primary">
+            <div class="card-body">
+                <h5 class="card-title">Всего задач</h5>
+                <p class="card-text display-4">{{ total_tasks }}</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="card text-white bg-success">
+            <div class="card-body">
+                <h5 class="card-title">Материалов</h5>
+                <p class="card-text display-4">{{ total_materials }}</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="card text-white bg-warning">
+            <div class="card-body">
+                <h5 class="card-title">Выплачено</h5>
+                <p class="card-text display-4">{{ "%.0f"|format(total_salary) }} ₽</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="card text-white bg-info">
+            <div class="card-body">
+                <h5 class="card-title">Ваша роль</h5>
+                <p class="card-text">{{ user.role.value }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5>Задачи по статусам</h5>
+            </div>
+            <div class="card-body">
+                {% if task_stats %}
+                    {% for status, count in task_stats.items() %}
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span>{{ status }}</span>
+                            <span class="badge bg-primary rounded-pill">{{ count }}</span>
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <p class="text-muted">Нет данных</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5>Быстрые действия</h5>
+            </div>
+            <div class="card-body">
+                <a href="/tasks?user_id={{ user.telegram_id }}" class="btn btn-primary w-100 mb-2">
+                    <i class="bi bi-list-task"></i> Просмотр задач
+                </a>
+                <a href="/reports?user_id={{ user.telegram_id }}" class="btn btn-success w-100">
+                    <i class="bi bi-file-earmark-text"></i> Отчёты
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

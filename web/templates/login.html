@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block title %}Вход - Benefon Bot{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h3>Вход в веб-панель</h3>
+            </div>
+            <div class="card-body">
+                {% if error %}
+                    <div class="alert alert-danger">{{ error }}</div>
+                {% endif %}
+
+                <div class="alert alert-info">
+                    <h5>Как получить доступ?</h5>
+                    <ol>
+                        <li>Откройте Telegram</li>
+                        <li>Найдите бота @benefonbot</li>
+                        <li>Отправьте команду <code>/web_login</code></li>
+                        <li>Перейдите по ссылке из сообщения</li>
+                    </ol>
+                </div>
+
+                <form method="GET" action="/web_login">
+                    <div class="mb-3">
+                        <label for="token" class="form-label">Токен доступа</label>
+                        <input type="text" class="form-control" id="token" name="token" placeholder="Вставьте токен из Telegram" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">Войти</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

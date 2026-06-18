@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block title %}Задачи - Benefon Bot{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h2>Задачи</h2>
+    </div>
+</div>
+
+<div class="row mt-3">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5>Список задач</h5>
+                <div>
+                    <a href="/tasks?user_id={{ user.telegram_id }}" class="btn btn-sm btn-secondary">Все</a>
+                    <a href="/tasks?user_id={{ user.telegram_id }}&status=Назначена" class="btn btn-sm btn-primary">Назначенные</a>
+                    <a href="/tasks?user_id={{ user.telegram_id }}&status=В работе" class="btn btn-sm btn-warning">В работе</a>
+                    <a href="/tasks?user_id={{ user.telegram_id }}&status=Оплачена" class="btn btn-sm btn-success">Оплаченные</a>
+                </div>
+            </div>
+            <div class="card-body">
+                {% if tasks %}
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Название</th>
+                                    <th>Статус</th>
+                                    <th>Стоимость</th>
+                                    <th>Дедлайн</th>
+                                    <th>Дата создания</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for task in tasks %}
+                                <tr>
+                                    <td>#{{ task.id }}</td>
+                                    <td>{{ task.title }}</td>
+                                    <td>
+                                        <span class="badge bg-{{ 'primary' if task.status == 'Назначена' else 'warning' if task.status == 'В работе' else 'success' if task.status == 'Оплачена' else 'info' }}">
+                                            {{ task.status }}
+                                        </span>
+                                    </td>
+                                    <td>{{ "%.0f"|format(task.cost or 0) }} ₽</td>
+                                    <td>{{ task.deadline.strftime('%d.%m.%Y') if task.deadline else '-' }}</td>
+                                    <td>{{ task.created_at.strftime('%d.%m.%Y %H:%M') }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <p class="text-muted">Нет задач</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

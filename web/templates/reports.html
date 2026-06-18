@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block title %}Отчёты - Benefon Bot{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h2>Отчёты</h2>
+        <p class="text-muted">Генерация и просмотр отчётов</p>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5>Сгенерировать отчёт</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="/api/generate_report">
+                    <div class="mb-3">
+                        <label for="report_date" class="form-label">Дата отчёта</label>
+                        <input type="date" class="form-control" id="report_date" name="date" value="{{ today }}">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Форматы:</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="formats" value="pdf" id="pdf" checked>
+                            <label class="form-check-label" for="pdf">PDF</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="formats" value="excel" id="excel" checked>
+                            <label class="form-check-label" for="excel">Excel</label>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-file-earmark-text"></i> Сгенерировать
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5>Последние отчёты</h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted">Отчёты автоматически генерируются каждый день в 20:00 и отправляются владельцу.</p>
+                <hr>
+                <h6>Что включает отчёт:</h6>
+                <ul>
+                    <li>📋 Список задач за день</li>
+                    <li>📦 Остатки материалов</li>
+                    <li>💰 Зарплата к выплате</li>
+                    <li>📊 4 графика (Matplotlib)</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5>Расписание автоматических отчётов</h5>
+            </div>
+            <div class="card-body">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Время</th>
+                            <th>Отчёт</th>
+                            <th>Получатель</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>09:00</td>
+                            <td>Дайджест дня</td>
+                            <td>Все сотрудники</td>
+                        </tr>
+                        <tr>
+                            <td>20:00</td>
+                            <td>Ежедневный отчёт</td>
+                            <td>Владелец</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
