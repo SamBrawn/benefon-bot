@@ -121,7 +121,8 @@ if __name__ == "__main__":
     os.makedirs("uploads/photos", exist_ok=True)
     os.makedirs("reports", exist_ok=True)
 
-    if settings.LOCAL_DEBUG:
-        uvicorn.run(app, host=settings.WEB_SERVER_HOST, port=settings.WEB_SERVER_PORT)
-    else:
-        uvicorn.run(app, host=settings.WEB_SERVER_HOST, port=settings.WEB_SERVER_PORT)
+    # Render использует переменную PORT
+    port = int(os.getenv("PORT", settings.WEB_SERVER_PORT))
+    host = os.getenv("WEB_SERVER_HOST", settings.WEB_SERVER_HOST)
+    
+    uvicorn.run(app, host=host, port=port)
