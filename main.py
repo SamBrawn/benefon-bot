@@ -114,15 +114,17 @@ async def cleanup_photos():
     logger.info("Old photos cleaned up")
 
 
+# Запуск приложения (используется Render.com)
+import os
+
 if __name__ == "__main__":
     # Создаём папку для логов
-    import os
     os.makedirs("logs", exist_ok=True)
     os.makedirs("uploads/photos", exist_ok=True)
     os.makedirs("reports", exist_ok=True)
 
     # Render использует переменную PORT
-    port = int(os.getenv("PORT", settings.WEB_SERVER_PORT))
-    host = os.getenv("WEB_SERVER_HOST", settings.WEB_SERVER_HOST)
+    port = int(os.getenv("PORT", os.getenv("WEB_SERVER_PORT", "8000")))
+    host = os.getenv("WEB_SERVER_HOST", "0.0.0.0")
     
-    uvicorn.run(app, host=host, port=port)
+    uvicorn.run("main:app", host=host, port=port, reload=False)
