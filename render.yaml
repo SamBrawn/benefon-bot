@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: benefon-bot
+    env: python
+    buildCommand: |
+      apt-get update
+      apt-get install -y libjpeg-dev zlib1g-dev
+      pip install --upgrade pip
+      pip install -r requirements.txt
+    startCommand: python main.py
+    envVars:
+      - key: BOT_TOKEN
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: LOCAL_DEBUG
+        value: false
+      - key: WEBHOOK_URL
+        sync: false
+      - key: ADMIN_IDS
+        sync: false
+      - key: WEB_SERVER_HOST
+        value: 0.0.0.0
+      - key: WEB_SERVER_PORT
+        value: 8000
+      - key: LOG_LEVEL
+        value: INFO
