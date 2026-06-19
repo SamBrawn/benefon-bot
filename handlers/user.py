@@ -1,233 +1,235 @@
-from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery
+from aiogram import Router, types
+from aiogram.filters import Command
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import State, StatesGroup
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from database import get_db
-from models import User, UserRole, ConstructionObject
-from keyboards import get_main_menu_keyboard, get_cancel_keyboard
-from config import settings
-import logging
+from models import User
+from datetime import datetime
 
-logger = logging.getLogger(__name__)
 router = Router()
 
+# Главное меню (для незарегистрированных)
+def get_main_keyboard():
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="📋 Мои задачи")],
+            [KeyboardButton(text="➕ Новая задача")],
+            [KeyboardButton(text="📊 Отчёт")],
+            [KeyboardButton(text="🔑 Веб-панель")]
+        ],
+        resize_keyboard=True,
+        input_field_placeholder="Выберите действие..."
+    )
 
-class RegistrationStates(StatesGroup):
-    waiting_for_name = State()
-    waiting_for_role = State()
-    waiting_for_object = State()
+# Меню для зарегистрированных (по роли)
+def get_role_keyboard(role: str = None):
+    keyboard = [
+        [KeyboardButton(text="📋 Мои задачи")],
+        [KeyboardButton(text="➕ Новая задача")],
+    ]
+    
+    if role in ["owner", "general_director", "foreman", "pto"]:
+        keyboard.append([KeyboardButton(text="📊 Отчёт")])
+    
+    if role in ["owner", "general_director", "foreman"]:
+        keyboard.append([KeyboardButton(text="📦 Материалы")])
+        keyboard.append([KeyboardButton(text="🔧 Инструменты")])
+    
+    if role in ["owner", "general_director", "foreman"]:
+        keyboard.append([KeyboardButton(text="👥 Команда")])
+    
+    keyboard.append([KeyboardButton(text="🔑 Веб-панель")])
+    keyboard.append([KeyboardButton(text="👤 Мой профиль")])
+    
+    return ReplyKeyboardMarkup(
+        keyboard=keyboard,
+        resize_keyboard=True,
+        input_field_placeholder="Выберите действие..."
+    )
 
 
-@router.message(F.text == "/start")
-async def cmd_start(message: Message, state: FSMContext):
-    """Обработка команды /start"""
+@router.message(Command("start"))
+async def start(message: types.Message):
     async for session in get_db():
-        from sqlalchemy import select
         result = await session.execute(
             select(User).where(User.telegram_id == message.from_user.id)
         )
         user = result.scalar_one_or_none()
-
+        
         if user:
-            # Пользователь уже зарегистрирован
             await message.answer(
-                f"👋 С возвращением, {user.full_name}!\n"
-                f"Ваша роль: {get_role_name(user.role)}",
-                reply_markup=get_main_menu_keyboard(user.role)
+                f"👋 С возвращением, {user.full_name}!\n\n"
+                f"🏗️ Роль: {user.role}\n"
+                f"🆔 ID: {user.telegram_id}\n\n"
+                "Выберите действие:",
+                reply_markup=get_role_keyboard(user.role)
             )
         else:
-            # Новая регистрация
-            # Проверяем, является ли пользователь админом
-            if message.from_user.id in settings.admin_list:
-                role = UserRole.OWNER
-                await register_user(message, role, None, state)
-            else:
-                # Запрашиваем ФИО
-                await message.answer(
-                    "👋 Добро пожаловать!\n"
-                    "Пожалуйста, введите ваше ФИО:",
-                    reply_markup=get_cancel_keyboard()
-                )
-                await state.set_state(RegistrationStates.waiting_for_name)
+            await message.answer(
+                "👋 Добро пожаловать в Benefon Bot!\n\n"
+                "🏗️ Строительная компания «Бенефон»\n\n"
+                "❌ Вы не зарегистрированы.\n"
+                "Обратитесь к владельцу для получения доступа.\n\n"
+                "Доступные команды:\n"
+                "/start — Главное меню\n"
+                "/help — Помощь\n"
+                "/web_login — Веб-панель",
+                reply_markup=get_main_keyboard()
+            )
 
 
-@router.message(RegistrationStates.waiting_for_name)
-async def process_name(message: Message, state: FSMContext):
-    """Обработка ФИО"""
-    if message.text == "❌ Отмена":
-        await state.clear()
-        await message.answer("❌ Регистрация отменена", reply_markup=None)
-        return
-
-    await state.update_data(full_name=message.text)
-    await message.answer(
-        "✅ ФИО сохранено.\n"
-        "Теперь выберите вашу роль:\n\n"
-        "👑 Владелец\n"
-        "💼 Гендиректор\n"
-        "📐 ПТО\n"
-        "👷 Прораб\n"
-        "⚡ Электрик\n"
-        "🔨 Рабочий",
-        reply_markup=get_cancel_keyboard()
+@router.message(Command("help"))
+async def help_command(message: types.Message):
+    help_text = (
+        "🤖 Benefon Bot — Помощь\n\n"
+        "📋 Основные команды:\n"
+        "/start — Главное меню\n"
+        "/help — Помощь\n\n"
+        "📌 Для всех:\n"
+        "/my_tasks — Мои задачи\n"
+        "/web_login — Веб-панель\n\n"
+        "👷 Рабочий/Электрик:\n"
+        "/start_task [id] — Начать задачу\n"
+        "/submit_photo [id] — Сдать фото\n"
+        "/my_salary — Моя зарплата\n\n"
+        "👔 Прораб:\n"
+        "/new_task — Создать задачу\n"
+        "/approve_task [id] — Утвердить\n"
+        "/reject_task [id] — Отклонить\n"
+        "/add_material — Добавить материал\n"
+        "/use_material — Списать материал\n"
+        "/stock — Остатки\n"
+        "/assign_tool — Закрепить инструмент\n"
+        "/transfer_tool — Передать\n"
+        "/new_order — Заявка на материалы\n\n"
+        "👑 Гендиректор:\n"
+        "/pay_task [id] — Оплатить\n"
+        "/adjust_cost [id] [цена] — Изменить стоимость\n"
+        "/gen_report — Отчёт\n\n"
+        "👑 Владелец:\n"
+        "/add_user — Добавить сотрудника\n"
+        "/add_object — Добавить объект\n"
+        "/owner_approve [id] — Утвердить заявку"
     )
-    await state.set_state(RegistrationStates.waiting_for_role)
+    await message.answer(help_text)
 
 
-@router.message(RegistrationStates.waiting_for_role)
-async def process_role(message: Message, state: FSMContext):
-    """Обработка роли"""
-    if message.text == "❌ Отмена":
-        await state.clear()
-        await message.answer("❌ Регистрация отменена", reply_markup=None)
-        return
+# === ОБРАБОТЧИКИ КНОПОК ===
 
-    role_map = {
-        "👑 Владелец": UserRole.OWNER,
-        "💼 Гендиректор": UserRole.GENERAL_DIRECTOR,
-        "📐 ПТО": UserRole.PTO,
-        "👷 Прораб": UserRole.FOREMAN,
-        "⚡ Электрик": UserRole.ELECTRICIAN,
-        "🔨 Рабочий": UserRole.WORKER,
-    }
-
-    role = role_map.get(message.text)
-    if not role:
-        await message.answer("❌ Неверная роль. Выберите из списка:")
-        return
-
-    await state.update_data(role=role)
-
-    # Если роль не рабочий/электрик, запрашиваем объект
-    if role in [UserRole.OWNER, UserRole.GENERAL_DIRECTOR, UserRole.PTO, UserRole.FOREMAN]:
-        async for session in get_db():
-            from sqlalchemy import select
-            result = await session.execute(select(ConstructionObject).where(ConstructionObject.is_active == True))
-            objects = result.scalars().all()
-
-            if not objects:
-                # Создаём объект по умолчанию
-                obj = ConstructionObject(name="Основной объект", address="Не указан")
-                session.add(obj)
-                await session.commit()
-                await register_user(message, role, obj.id, state)
-            else:
-                await message.answer(
-                    "Выберите объект:",
-                    reply_markup=get_objects_keyboard(objects)
-                )
-                await state.set_state(RegistrationStates.waiting_for_object)
-    else:
-        await register_user(message, role, None, state)
+@router.message(lambda message: message.text == "📋 Мои задачи")
+async def my_tasks_button(message: types.Message):
+    from handlers.task import my_tasks
+    await my_tasks(message)
 
 
-@router.callback_query(RegistrationStates.waiting_for_object, F.data.startswith("object_"))
-async def process_object(callback: CallbackQuery, state: FSMContext):
-    """Обработка выбора объекта"""
-    object_id = int(callback.data.split("_")[1])
-    data = await state.get_data()
-    role = data.get("role")
-
-    await register_user(callback.message, role, object_id, state)
-    await callback.answer()
-
-
-async def register_user(message: Message, role: UserRole, object_id: int | None, state: FSMContext):
-    """Регистрация пользователя"""
-    data = await state.get_data()
-    full_name = data.get("full_name", message.from_user.full_name)
-
+@router.message(lambda message: message.text == "➕ Новая задача")
+async def new_task_button(message: types.Message):
     async for session in get_db():
-        user = User(
-            telegram_id=message.from_user.id,
-            username=message.from_user.username,
-            full_name=full_name,
-            role=role,
-            object_id=object_id
-        )
-        session.add(user)
-        await session.commit()
-
-        await message.answer(
-            f"✅ Регистрация завершена!\n\n"
-            f"👤 {full_name}\n"
-            f"🎭 Роль: {get_role_name(role)}\n"
-            f"🏗️ Объект: {object_id or 'Не назначен'}",
-            reply_markup=get_main_menu_keyboard(role)
-        )
-
-        await state.clear()
-        logger.info(f"New user registered: {message.from_user.id}, role={role}")
-
-
-@router.message(F.text == "🌐 Веб-панель")
-async def cmd_web_login(message: Message):
-    """Генерация токена для веб-панели"""
-    async for session in get_db():
-        from sqlalchemy import select
-        import uuid
-        from datetime import datetime, timedelta
-
         result = await session.execute(
             select(User).where(User.telegram_id == message.from_user.id)
         )
         user = result.scalar_one_or_none()
-
         if not user:
-            await message.answer("❌ Вы не зарегистрированы. Используйте /start")
+            await message.answer("❌ Вы не зарегистрированы.")
             return
-
-        # Создаём токен
-        token = uuid.uuid4()
-        expires_at = datetime.utcnow() + timedelta(hours=24)
-
-        from models import WebToken
-        web_token = WebToken(
-            user_id=user.telegram_id,
-            token=token,
-            expires_at=expires_at
-        )
-        session.add(web_token)
-        await session.commit()
-
-        # Отправляем ссылку
-        web_url = f"{settings.WEB_BASE_URL}/web_login?token={token}"
-        await message.answer(
-            f"🔗 Ваша ссылка для входа в веб-панель (действительна 24 часа):\n\n"
-            f"{web_url}"
-        )
+        if user.role not in ["owner", "general_director", "foreman", "pto"]:
+            await message.answer("❌ У вас нет прав для создания задач.")
+            return
+    
+    # Запускаем FSM создание задачи через команду
+    await message.answer(
+        "➕ Создание новой задачи\n\n"
+        "Используйте команду:\n"
+        "/new_task — Начать создание задачи"
+    )
 
 
-@router.message(F.text == "📊 Статистика")
-async def cmd_stats(message: Message):
-    """Показать статистику"""
+@router.message(lambda message: message.text == "📊 Отчёт")
+async def report_button(message: types.Message):
+    await message.answer(
+        "📊 Для генерации отчёта используйте команду:\n"
+        "/gen_report — Полный отчёт\n"
+        "/monthly_report — Месячный отчёт"
+    )
+
+
+@router.message(lambda message: message.text == "📦 Материалы")
+async def materials_button(message: types.Message):
+    await message.answer(
+        "📦 Управление материалами\n\n"
+        "/stock — Остатки по объектам\n"
+        "/add_material — Добавить материал\n"
+        "/use_material — Списать материал\n"
+        "/critical — Критические остатки\n"
+        "/new_order — Заявка на материалы"
+    )
+
+
+@router.message(lambda message: message.text == "🔧 Инструменты")
+async def tools_button(message: types.Message):
+    await message.answer(
+        "🔧 Управление инструментами\n\n"
+        "/assign_tool — Закрепить инструмент\n"
+        "/transfer_tool — Передать инструмент\n"
+        "/return_tool — Вернуть инструмент\n"
+        "/my_tools — Мои инструменты"
+    )
+
+
+@router.message(lambda message: message.text == "👥 Команда")
+async def team_button(message: types.Message):
     async for session in get_db():
-        from sqlalchemy import select, func
-        from models import Task
-
-        # Статистика задач
         result = await session.execute(
-            select(Task.status, func.count(Task.id))
-            .group_by(Task.status)
+            select(User).where(User.telegram_id == message.from_user.id)
         )
-        stats = result.all()
+        user = result.scalar_one_or_none()
+        if not user:
+            await message.answer("❌ Вы не зарегистрированы.")
+            return
+        
+        if user.role == "foreman":
+            result = await session.execute(
+                select(User).where(User.role.in_(["worker", "electrician"]))
+            )
+            users = result.scalars().all()
+            text = "👥 Ваша команда:\n\n"
+            for u in users:
+                text += f"• {u.full_name} — {u.role}\n"
+            await message.answer(text)
+        else:
+            await message.answer("👥 Управление командой:\n/add_user — Добавить сотрудника")
 
-        stats_text = "📊 Статистика задач:\n\n"
-        for status, count in stats:
-            stats_text += f"{status}: {count}\n"
 
-        await message.answer(stats_text)
+@router.message(lambda message: message.text == "🔑 Веб-панель")
+async def web_panel_button(message: types.Message):
+    await message.answer(
+        "🔑 Веб-панель доступна по адресу:\n\n"
+        "http://localhost:8002/login\n\n"
+        "Или используйте команду:\n"
+        "/web_login"
+    )
 
 
-def get_role_name(role: UserRole) -> str:
-    """Получить название роли на русском"""
-    names = {
-        UserRole.OWNER: "👑 Владелец",
-        UserRole.GENERAL_DIRECTOR: "💼 Гендиректор",
-        UserRole.PTO: "📐 ПТО",
-        UserRole.FOREMAN: "👷 Прораб",
-        UserRole.ELECTRICIAN: "⚡ Электрик",
-        UserRole.WORKER: "🔨 Рабочий",
-    }
-    return names.get(role, role.value)
+@router.message(lambda message: message.text == "👤 Мой профиль")
+async def profile_button(message: types.Message):
+    async for session in get_db():
+        result = await session.execute(
+            select(User).where(User.telegram_id == message.from_user.id)
+        )
+        user = result.scalar_one_or_none()
+        
+        if user:
+            await message.answer(
+                f"👤 Ваш профиль\n\n"
+                f"📛 Имя: {user.full_name}\n"
+                f"🎭 Роль: {user.role}\n"
+                f"🆔 ID: {user.telegram_id}\n"
+                f"📍 Объект: {user.object_id or 'Не назначен'}\n"
+                f"📅 Дата: {user.created_at.strftime('%d.%m.%Y %H:%M') if user.created_at else '—'}"
+            )
+        else:
+            await message.answer(
+                "👤 Вы не зарегистрированы.\n"
+                "Обратитесь к владельцу для получения доступа."
+            )

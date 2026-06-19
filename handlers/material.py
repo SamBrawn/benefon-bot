@@ -1,222 +1,273 @@
-from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery
+from aiogram import Router, types
+from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from database import get_db
-from models import User, UserRole, Material, ConstructionObject, MaterialUnit
-from keyboards import get_main_menu_keyboard, get_objects_keyboard, get_cancel_keyboard
+from models import Material, MaterialUnit, ConstructionObject, User, UserRole
+from datetime import datetime
 import logging
 
 logger = logging.getLogger(__name__)
 router = Router()
 
 
-class MaterialStates(StatesGroup):
+class MaterialAddition(StatesGroup):
     waiting_for_object = State()
     waiting_for_name = State()
     waiting_for_unit = State()
     waiting_for_quantity = State()
 
 
-@router.message(F.text == "📦 Материалы")
-async def cmd_materials(message: Message):
-    """Просмотр материалов"""
-    async for session in get_db():
-        from sqlalchemy import select
+class MaterialUsage(StatesGroup):
+    waiting_for_material_id = State()
+    waiting_for_quantity = State()
 
-        result = await session.execute(
+
+# === /add_material — добавление материала ===
+@router.message(Command("add_material"))
+async def cmd_add_material(message: types.Message, state: FSMContext):
+    async for session in get_db():
+        user = await session.execute(
             select(User).where(User.telegram_id == message.from_user.id)
         )
-        user = result.scalar_one_or_none()
-
-        if not user:
-            await message.answer("❌ Вы не зарегистрированы")
+        user = user.scalar_one_or_none()
+        
+        if not user or user.role not in [UserRole.OWNER, UserRole.GENERAL_DIRECTOR, UserRole.FOREMAN]:
+            await message.answer("❌ У вас нет прав для добавления материалов.")
             return
-
-        # Получаем объекты пользователя
-        if user.role == UserRole.OWNER:
-            result = await session.execute(select(ConstructionObject))
-            objects = result.scalars().all()
-        else:
-            result = await session.execute(
-                select(ConstructionObject).where(ConstructionObject.id == user.object_id)
-            )
-            objects = result.scalars().all()
-
+        
+        objects = await session.execute(select(ConstructionObject))
+        objects = objects.scalars().all()
+        
         if not objects:
-            await message.answer("❌ Нет доступных объектов")
+            await message.answer("❌ Нет доступных объектов. Сначала создайте объект через /add_object")
             return
-
-        await message.answer(
-            "Выберите объект для просмотра материалов:",
-            reply_markup=get_objects_keyboard(objects)
-        )
-
-
-@router.callback_query(F.data.startswith("object_"))
-async def callback_show_materials(callback: CallbackQuery, session: AsyncSession):
-    """Показать материалы объекта"""
-    object_id = int(callback.data.split("_")[1])
-
-    from sqlalchemy import select
-    result = await session.execute(
-        select(Material).where(Material.object_id == object_id)
-    )
-    materials = result.scalars().all()
-
-    if not materials:
-        await callback.message.answer("📦 На этом объекте пока нет материалов")
-        await callback.answer()
-        return
-
-    materials_text = f"📦 Материалы на объекте:\n\n"
-    for material in materials:
-        critical = ""
-        if material.quantity <= (material.critical_percent or 10) * material.initial_quantity / 100:
-            critical = "⚠️ КРИТИЧЕСКИЙ ОСТАТОК!\n"
-
-        materials_text += f"📌 {material.name}\n"
-        materials_text += f"   Остаток: {material.quantity} {material.unit.value}\n"
-        materials_text += f"   Начальное: {material.initial_quantity} {material.unit.value}\n"
-        materials_text += critical + "\n"
-
-    await callback.message.answer(materials_text)
-    await callback.answer()
+        
+        text = "🏗️ Выберите объект (введите ID):\n\n"
+        for obj in objects:
+            text += f"• {obj.id}: {obj.name} — {obj.address or 'адрес не указан'}\n"
+        
+        await state.set_state(MaterialAddition.waiting_for_object)
+        await message.answer(text)
 
 
-@router.message(F.text == "➕ Добавить материал")
-async def cmd_add_material(message: Message, state: FSMContext):
-    """Добавление материала"""
-    async for session in get_db():
-        from sqlalchemy import select
-
-        result = await session.execute(
-            select(User).where(User.telegram_id == message.from_user.id)
-        )
-        user = result.scalar_one_or_none()
-
-        if not user or user.role not in [UserRole.OWNER, UserRole.GENERAL_DIRECTOR, UserRole.PTO]:
-            await message.answer("❌ У вас нет прав для добавления материалов")
-            return
-
-        # Получаем объекты
-        if user.role == UserRole.OWNER:
-            result = await session.execute(select(ConstructionObject))
-            objects = result.scalars().all()
-        else:
-            result = await session.execute(
-                select(ConstructionObject).where(ConstructionObject.id == user.object_id)
-            )
-            objects = result.scalars().all()
-
-        if not objects:
-            await message.answer("❌ Нет доступных объектов")
-            return
-
-        await message.answer(
-            "Выберите объект:",
-            reply_markup=get_objects_keyboard(objects)
-        )
-        await state.set_state(MaterialStates.waiting_for_object)
-
-
-@router.callback_query(MaterialStates.waiting_for_object, F.data.startswith("object_"))
-async def process_material_object(callback: CallbackQuery, state: FSMContext):
-    """Обработка выбора объекта"""
-    object_id = int(callback.data.split("_")[1])
-    await state.update_data(object_id=object_id)
-
-    await callback.message.answer(
-        "✅ Объект выбран.\n\n"
-        "Введите название материала:",
-        reply_markup=get_cancel_keyboard()
-    )
-    await state.set_state(MaterialStates.waiting_for_name)
-    await callback.answer()
-
-
-@router.message(MaterialStates.waiting_for_name)
-async def process_material_name(message: Message, state: FSMContext):
-    """Обработка названия материала"""
-    if message.text == "❌ Отмена":
-        await state.clear()
-        await message.answer("❌ Добавление материала отменено", reply_markup=get_main_menu_keyboard(UserRole.PTO))
-        return
-
-    await state.update_data(name=message.text)
-    await message.answer(
-        "✅ Название сохранено.\n\n"
-        "Выберите единицу измерения:",
-        reply_markup=get_cancel_keyboard()
-    )
-    await state.set_state(MaterialStates.waiting_for_unit)
-
-
-@router.message(MaterialStates.waiting_for_unit)
-async def process_material_unit(message: Message, state: FSMContext):
-    """Обработка единицы измерения"""
-    if message.text == "❌ Отмена":
-        await state.clear()
-        await message.answer("❌ Добавление материала отменено", reply_markup=get_main_menu_keyboard(UserRole.PTO))
-        return
-
-    unit_map = {
-        "шт": MaterialUnit.PIECE,
-        "м": MaterialUnit.METER,
-        "м²": MaterialUnit.SQUARE_METER,
-        "л": MaterialUnit.LITER,
-        "кг": MaterialUnit.KILOGRAM,
-        "уп": MaterialUnit.PACK,
-    }
-
-    unit = unit_map.get(message.text)
-    if not unit:
-        await message.answer("❌ Неверная единица. Используйте: шт, м, м², л, кг, уп")
-        return
-
-    await state.update_data(unit=unit)
-    await message.answer(
-        "✅ Единица измерения сохранена.\n\n"
-        "Введите начальное количество:",
-        reply_markup=get_cancel_keyboard()
-    )
-    await state.set_state(MaterialStates.waiting_for_quantity)
-
-
-@router.message(MaterialStates.waiting_for_quantity)
-async def process_material_quantity(message: Message, state: FSMContext, session: AsyncSession):
-    """Обработка количества и создание материала"""
-    if message.text == "❌ Отмена":
-        await state.clear()
-        await message.answer("❌ Добавление материала отменено", reply_markup=get_main_menu_keyboard(UserRole.PTO))
-        return
-
+@router.message(MaterialAddition.waiting_for_object)
+async def process_material_object(message: types.Message, state: FSMContext):
     try:
-        quantity = float(message.text)
+        object_id = int(message.text)
+        await state.update_data(object_id=object_id)
+        await state.set_state(MaterialAddition.waiting_for_name)
+        await message.answer("📦 Введите название материала:")
     except ValueError:
-        await message.answer("❌ Неверный формат. Введите число")
-        return
+        await message.answer("❌ Введите корректный ID объекта (число)")
 
-    data = await state.get_data()
 
-    # Создаём материал
-    material = Material(
-        object_id=data["object_id"],
-        name=data["name"],
-        unit=data["unit"],
-        quantity=quantity,
-        initial_quantity=quantity
-    )
-
-    session.add(material)
-    await session.commit()
-
+@router.message(MaterialAddition.waiting_for_name)
+async def process_material_name(message: types.Message, state: FSMContext):
+    await state.update_data(name=message.text)
+    await state.set_state(MaterialAddition.waiting_for_unit)
     await message.answer(
-        f"✅ Материал добавлен!\n\n"
-        f"📌 {data['name']}\n"
-        f"📦 {quantity} {data['unit'].value}",
-        reply_markup=get_main_menu_keyboard(UserRole.PTO)
+        "📏 Введите единицу измерения:\n\n"
+        "1 — шт\n2 — м\n3 — м²\n4 — л\n5 — кг\n6 — уп\n\n"
+        "Введите номер:"
     )
 
-    await state.clear()
+
+@router.message(MaterialAddition.waiting_for_unit)
+async def process_material_unit(message: types.Message, state: FSMContext):
+    unit_map = {
+        "1": MaterialUnit.PIECE,
+        "2": MaterialUnit.METER,
+        "3": MaterialUnit.SQUARE_METER,
+        "4": MaterialUnit.LITER,
+        "5": MaterialUnit.KILOGRAM,
+        "6": MaterialUnit.PACK
+    }
+    
+    if message.text not in unit_map:
+        await message.answer("❌ Введите номер от 1 до 6")
+        return
+    
+    await state.update_data(unit=unit_map[message.text])
+    await state.set_state(MaterialAddition.waiting_for_quantity)
+    await message.answer("🔢 Введите количество:")
+
+
+@router.message(MaterialAddition.waiting_for_quantity)
+async def process_material_quantity(message: types.Message, state: FSMContext):
+    try:
+        quantity = float(message.text.replace(',', '.'))
+        data = await state.get_data()
+        
+        async for session in get_db():
+            material = Material(
+                object_id=data['object_id'],
+                name=data['name'],
+                unit=data['unit'],
+                quantity=quantity,
+                initial_quantity=quantity
+            )
+            session.add(material)
+            await session.commit()
+            
+            unit_str = material.unit.value if hasattr(material.unit, 'value') else material.unit
+            await message.answer(
+                f"✅ Материал добавлен!\n\n"
+                f"📦 Название: {material.name}\n"
+                f"📏 Ед. изм.: {unit_str}\n"
+                f"🔢 Количество: {material.quantity}\n"
+                f"🏗️ Объект: {material.object_id}"
+            )
+            await state.clear()
+    except ValueError:
+        await message.answer("❌ Введите корректное число")
+
+
+# === /use_material — списание материала ===
+@router.message(Command("use_material"))
+async def cmd_use_material(message: types.Message, state: FSMContext):
+    async for session in get_db():
+        user = await session.execute(
+            select(User).where(User.telegram_id == message.from_user.id)
+        )
+        user = user.scalar_one_or_none()
+        
+        if not user or user.role not in [UserRole.OWNER, UserRole.GENERAL_DIRECTOR, UserRole.FOREMAN]:
+            await message.answer("❌ У вас нет прав для списания материалов.")
+            return
+        
+        materials = await session.execute(
+            select(Material).order_by(Material.object_id, Material.name)
+        )
+        materials = materials.scalars().all()
+        
+        if not materials:
+            await message.answer("📦 Нет материалов для списания.")
+            return
+        
+        text = "📦 Выберите материал для списания (введите ID):\n\n"
+        for m in materials:
+            unit_str = m.unit.value if hasattr(m.unit, 'value') else m.unit
+            text += f"• {m.id}: {m.name} — {m.quantity} {unit_str}\n"
+        
+        await state.set_state(MaterialUsage.waiting_for_material_id)
+        await message.answer(text)
+
+
+@router.message(MaterialUsage.waiting_for_material_id)
+async def process_use_material_id(message: types.Message, state: FSMContext):
+    try:
+        material_id = int(message.text)
+        await state.update_data(material_id=material_id)
+        
+        async for session in get_db():
+            material = await session.get(Material, material_id)
+            if not material:
+                await message.answer("❌ Материал не найден.")
+                await state.clear()
+                return
+            
+            unit_str = material.unit.value if hasattr(material.unit, 'value') else material.unit
+            await message.answer(
+                f"📦 {material.name} — доступно {material.quantity} {unit_str}\n\n"
+                "Введите количество для списания:"
+            )
+            await state.set_state(MaterialUsage.waiting_for_quantity)
+    except ValueError:
+        await message.answer("❌ Введите корректный ID (число)")
+
+
+@router.message(MaterialUsage.waiting_for_quantity)
+async def process_use_quantity(message: types.Message, state: FSMContext):
+    try:
+        quantity = float(message.text.replace(',', '.'))
+        data = await state.get_data()
+        
+        async for session in get_db():
+            material = await session.get(Material, data['material_id'])
+            if not material:
+                await message.answer("❌ Материал не найден.")
+                await state.clear()
+                return
+            
+            if quantity > material.quantity:
+                unit_str = material.unit.value if hasattr(material.unit, 'value') else material.unit
+                await message.answer(f"❌ Недостаточно материала. Доступно: {material.quantity} {unit_str}")
+                return
+            
+            material.quantity -= quantity
+            material.last_updated = datetime.utcnow()
+            await session.commit()
+            
+            unit_str = material.unit.value if hasattr(material.unit, 'value') else material.unit
+            await message.answer(
+                f"✅ Материал списан!\n\n"
+                f"📦 {material.name}\n"
+                f"🔢 Списано: {quantity} {unit_str}\n"
+                f"📊 Остаток: {material.quantity} {unit_str}"
+            )
+            await state.clear()
+    except ValueError:
+        await message.answer("❌ Введите корректное число")
+
+
+# === /stock — остатки материалов ===
+@router.message(Command("stock"))
+async def cmd_stock(message: types.Message):
+    async for session in get_db():
+        materials = await session.execute(
+            select(Material).order_by(Material.object_id, Material.name)
+        )
+        materials = materials.scalars().all()
+        
+        if not materials:
+            await message.answer("📦 Склад пуст.")
+            return
+        
+        text = "📦 Остатки материалов:\n\n"
+        current_object = None
+        
+        for m in materials:
+            obj = await session.get(ConstructionObject, m.object_id)
+            obj_name = obj.name if obj else f"Объект {m.object_id}"
+            
+            if current_object != obj_name:
+                current_object = obj_name
+                text += f"\n🏗️ {obj_name}\n"
+            
+            unit_str = m.unit.value if hasattr(m.unit, 'value') else m.unit
+            text += f"• {m.name}: {m.quantity} {unit_str}\n"
+        
+        await message.answer(text)
+
+
+# === /critical — критические остатки ===
+@router.message(Command("critical"))
+async def cmd_critical(message: types.Message):
+    async for session in get_db():
+        materials = await session.execute(
+            select(Material).order_by(Material.object_id, Material.name)
+        )
+        materials = materials.scalars().all()
+        
+        critical_materials = []
+        for m in materials:
+            if m.initial_quantity > 0:
+                percent = (m.quantity / m.initial_quantity) * 100
+                if percent <= (m.critical_percent or 10.0):
+                    critical_materials.append(m)
+        
+        if not critical_materials:
+            await message.answer("✅ Критических остатков нет.")
+            return
+        
+        text = "⚠️ Критические остатки:\n\n"
+        for m in critical_materials:
+            obj = await session.get(ConstructionObject, m.object_id)
+            obj_name = obj.name if obj else f"Объект {m.object_id}"
+            unit_str = m.unit.value if hasattr(m.unit, 'value') else m.unit
+            percent = (m.quantity / m.initial_quantity) * 100
+            text += f"• {m.name} ({obj_name}): {m.quantity} {unit_str} ({percent:.0f}%)\n"
+        
+        await message.answer(text)
