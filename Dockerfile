@@ -19,5 +19,8 @@ RUN pip install -r requirements.txt
 # Копирование всего проекта
 COPY . .
 
+# Открываем порт для Render
+EXPOSE 8000
+
 # Запуск бота
 CMD ["python", "main.py"]
