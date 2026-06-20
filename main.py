@@ -73,18 +73,27 @@ async def lifespan(app: FastAPI):
 # Создание FastAPI приложения с lifespan
 app = FastAPI(title="Benefon Bot", lifespan=lifespan)
 
-# Подключение веб-панели
-from web.app import app as web_app
-app.mount("/", web_app)
+# Webhook эндпоинт (должен быть перед монтированием веб-панели)
+from aiogram import types
+from fastapi import Request
+import json
 
-
-# Webhook эндпоинт
 @app.post("/webhook")
 async def webhook(request: Request):
     """Webhook для Telegram"""
-    update = types.Update(**await request.json())
-    await dp.feed_update(bot, update)
-    return {"ok": True}
+    try:
+        body = await request.body()
+        update_data = json.loads(body)
+        update = types.Update(**update_data)
+        await dp.feed_update(bot, update)
+        return {"ok": True}
+    except Exception as e:
+        logger.error(f"Webhook error: {e}")
+        return {"ok": False, "error": str(e)}
+
+# Подключение веб-панели
+from web.app import app as web_app
+app.mount("/", web_app)
 
 
 # Расписания
