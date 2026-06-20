@@ -1,26 +1,23 @@
 FROM python:3.11-slim
 
-# Установка системных зависимостей
-RUN apt-get update && apt-get install -y \
-    gcc \
-    libpq-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-# Создание рабочей директории
 WORKDIR /app
 
-# Копирование requirements и установка зависимостей
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Установка системных зависимостей для Pillow и других библиотек
+RUN apt-get update && apt-get install -y \
+    libjpeg-dev \
+    zlib1g-dev \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
 
-# Копирование кода
+# Копирование и установка зависимостей
+COPY requirements.txt .
+RUN pip install --upgrade pip
+RUN pip install pydantic==2.5.0
+RUN pip install pydantic-core==2.14.1
+RUN pip install -r requirements.txt
+
+# Копирование всего проекта
 COPY . .
 
-# Создание необходимых папок
-RUN mkdir -p logs uploads/photos reports
-
-# Открытие порта
-EXPOSE 8000
-
-# Запуск
+# Запуск бота
 CMD ["python", "main.py"]
