@@ -67,7 +67,8 @@ async def process_full_name(message: types.Message, state: FSMContext):
         "2 — Инженер ПТО\n"
         "3 — Прораб\n"
         "4 — Электрик\n"
-        "5 — Рабочий\n\n"
+        "5 — Рабочий\n"
+        "6 — Владелец\n\n"
         "Введите номер роли:"
     )
 
@@ -79,11 +80,12 @@ async def process_role(message: types.Message, state: FSMContext):
         "2": UserRole.PTO,
         "3": UserRole.FOREMAN,
         "4": UserRole.ELECTRICIAN,
-        "5": UserRole.WORKER
+        "5": UserRole.WORKER,
+        "6": UserRole.OWNER
     }
     
     if message.text not in role_map:
-        await message.answer("❌ Введите номер от 1 до 5")
+        await message.answer("❌ Введите номер от 1 до 6")
         return
     
     data = await state.get_data()
