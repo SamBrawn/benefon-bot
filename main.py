@@ -28,7 +28,7 @@ storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
 scheduler = AsyncIOScheduler(timezone="Europe/Moscow")
 
-# Регистрация хэндлеров
+# Регистрация хэндлеров (выполняется 1 раз при импорте)
 dp.include_router(user.router)
 dp.include_router(task.router)
 dp.include_router(photo.router)
@@ -127,4 +127,5 @@ if __name__ == "__main__":
     port = int(os.getenv("PORT", os.getenv("WEB_SERVER_PORT", "8000")))
     host = os.getenv("WEB_SERVER_HOST", "0.0.0.0")
     
-    uvicorn.run("main:app", host=host, port=port, reload=False)
+    # Передаём объект app напрямую, чтобы uvicorn не переимпортировал модуль
+    uvicorn.run(app, host=host, port=port, reload=False)
