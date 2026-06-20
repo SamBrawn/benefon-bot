@@ -20,10 +20,14 @@
             <!-- Sidebar -->
             <nav class="col-md-2 d-md-block sidebar">
                 <h5 class="text-white p-3">Benefon Bot</h5>
+                {% if user %}
                 <a href="/dashboard?user_id={{ user.telegram_id }}"><i class="bi bi-speedometer2"></i> Дашборд</a>
                 <a href="/tasks?user_id={{ user.telegram_id }}"><i class="bi bi-list-task"></i> Задачи</a>
                 <a href="/reports?user_id={{ user.telegram_id }}"><i class="bi bi-file-earmark-text"></i> Отчёты</a>
                 <a href="/logout"><i class="bi bi-box-arrow-right"></i> Выход</a>
+                {% else %}
+                <a href="/web_login"><i class="bi bi-box-arrow-in-right"></i> Вход</a>
+                {% endif %}
             </nav>
 
             <!-- Main content -->
