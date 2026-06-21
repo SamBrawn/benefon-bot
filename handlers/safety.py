@@ -93,8 +93,8 @@ async def check_safety_briefing(user_id: int) -> bool:
 
 async def require_safety_briefing(message: types.Message) -> bool:
     """
-    Проверяет инструктаж. Возвращает True если инструктаж пройден.
-    Если не пройден — отправляет сообщение с предложением пройти.
+    Проверяет инструктаж. Возвращает True если инструктаж пройден или не требуется.
+    Возвращает False если инструктаж нужен (отправляет сообщение).
     """
     async for session in get_db():
         user = await session.execute(
@@ -110,11 +110,15 @@ async def require_safety_briefing(message: types.Message) -> bool:
             )
             return False
         
-        # Проверяем, прошёл ли инструктаж сегодня
+        # Владельцы и гендиректора НЕ проходят инструктаж
+        if user.role in ["owner", "general_director"]:
+            return True
+        
+        # Для остальных проверяем, проходил ли сегодня
         if await check_safety_briefing(message.from_user.id):
             return True
         
-        # Если инструктаж не пройден — предлагаем пройти
+        # Не проходил — показываем инструктаж
         await message.answer(
             f"🔴 ВНИМАНИЕ: ОБЯЗАТЕЛЬНЫЙ ИНСТРУКТАЖ ПО ТБ\n\n"
             f"Уважаемый {user.full_name}!\n\n"
