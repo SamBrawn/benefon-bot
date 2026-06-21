@@ -5,7 +5,16 @@ from config import settings
 # Заменяем postgresql:// на postgresql+asyncpg:// и sslmode=require на ssl=require
 DATABASE_URL = settings.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://").replace("sslmode=require", "ssl=require")
 
-engine = create_async_engine(DATABASE_URL, echo=False)
+# Настройки пула соединений для предотвращения "connection is closed"
+engine = create_async_engine(
+    DATABASE_URL,
+    echo=False,
+    pool_size=5,
+    max_overflow=10,
+    pool_pre_ping=True,  # Проверяем соединение перед использованием
+    pool_recycle=3600,   # Переподключаем каждый час
+    pool_timeout=30      # Таймаут ожидания соединения
+)
 AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 Base = declarative_base()
 
