@@ -36,8 +36,8 @@ def get_role_keyboard(role: str = None):
         keyboard.append([KeyboardButton(text="📦 Материалы")])
         keyboard.append([KeyboardButton(text="🔧 Инструменты")])
     
-    if role in ["owner", "general_director", "foreman"]:
-        keyboard.append([KeyboardButton(text="👥 Команда")])
+    if role == "owner":
+        keyboard.append([KeyboardButton(text="👥 Управление командой")])
     
     keyboard.append([KeyboardButton(text="🔑 Веб-панель")])
     keyboard.append([KeyboardButton(text="👤 Мой профиль")])
@@ -179,6 +179,18 @@ async def tools_button(message: types.Message):
         "/transfer_tool — Передать инструмент\n"
         "/return_tool — Вернуть инструмент\n"
         "/my_tools — Мои инструменты"
+    )
+
+
+@router.message(lambda message: message.text == "👥 Управление командой")
+async def team_management(message: types.Message):
+    await message.answer(
+        "👥 *Управление командой*\n\n"
+        "/add_user — Добавить сотрудника\n"
+        "/list_users — Список всех сотрудников\n"
+        "/edit_user [ID] — Редактировать сотрудника\n"
+        "/delete_user [ID] — Удалить сотрудника",
+        parse_mode="Markdown"
     )
 
 

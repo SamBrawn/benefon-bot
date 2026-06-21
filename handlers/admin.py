@@ -270,3 +270,274 @@ async def cmd_gen_report(message: types.Message):
             f"✅ Завершено: {completed}\n"
             f"💰 Выплачено: {total_paid} руб."
         )
+
+
+# ========== ПРОСМОТР СОТРУДНИКОВ ==========
+@router.message(Command("list_users"))
+async def list_users(message: types.Message):
+    """Показывает список всех зарегистрированных сотрудников."""
+    async for session in get_db():
+        current_user = await session.execute(
+            select(User).where(User.telegram_id == message.from_user.id)
+        )
+        current_user = current_user.scalar_one_or_none()
+        if not current_user or current_user.role != UserRole.OWNER:
+            await message.answer("❌ Только владелец может просматривать список сотрудников.")
+            return
+
+        result = await session.execute(select(User).order_by(User.role, User.full_name))
+        users = result.scalars().all()
+
+        if not users:
+            await message.answer("📋 В системе пока нет зарегистрированных сотрудников.")
+            return
+
+        text = "👥 *Список сотрудников:*\n\n"
+        for user in users:
+            role_emoji = {
+                "owner": "👑",
+                "general_director": "💼",
+                "pto": "📐",
+                "foreman": "👷",
+                "electrician": "⚡",
+                "worker": "🔨"
+            }.get(user.role.value if hasattr(user.role, 'value') else user.role, "❓")
+            text += f"{role_emoji} *{user.full_name}*\n"
+            text += f"   🆔 ID: `{user.telegram_id}`\n"
+            text += f"   🎭 Роль: {user.role.value if hasattr(user.role, 'value') else user.role}\n"
+            if user.object_id:
+                text += f"   🏗️ Объект: {user.object_id}\n"
+            text += "\n"
+
+        await message.answer(text, parse_mode="Markdown")
+
+
+# ========== РЕДАКТИРОВАНИЕ СОТРУДНИКА ==========
+@router.message(Command("edit_user"))
+async def edit_user_start(message: types.Message, state: FSMContext):
+    """Начинает процесс редактирования сотрудника."""
+    async for session in get_db():
+        current_user = await session.execute(
+            select(User).where(User.telegram_id == message.from_user.id)
+        )
+        current_user = current_user.scalar_one_or_none()
+        if not current_user or current_user.role != UserRole.OWNER:
+            await message.answer("❌ Только владелец может редактировать сотрудников.")
+            return
+
+        parts = message.text.split()
+        if len(parts) < 2:
+            await message.answer(
+                "❌ Укажите ID сотрудника.\n"
+                "Пример: `/edit_user 123456789`",
+                parse_mode="Markdown"
+            )
+            return
+
+        try:
+            user_id = int(parts[1])
+        except ValueError:
+            await message.answer("❌ ID должен быть числом.")
+            return
+
+        result = await session.execute(
+            select(User).where(User.telegram_id == user_id)
+        )
+        user = result.scalar_one_or_none()
+
+        if not user:
+            await message.answer(f"❌ Пользователь с ID `{user_id}` не найден.", parse_mode="Markdown")
+            return
+
+        await state.update_data(edit_user_id=user_id)
+
+        class EditUserStates(StatesGroup):
+            waiting_for_new_name = State()
+            waiting_for_new_role = State()
+            waiting_for_new_object = State()
+
+        await state.set_state(EditUserStates.waiting_for_new_name)
+        await message.answer(
+            f"✏️ *Редактирование сотрудника*\n\n"
+            f"📛 Текущее имя: {user.full_name}\n"
+            f"🎭 Текущая роль: {user.role.value if hasattr(user.role, 'value') else user.role}\n"
+            f"🏗️ Текущий объект: {user.object_id or 'Не назначен'}\n\n"
+            f"Введите **новое имя** (или отправьте `.` чтобы оставить без изменений):",
+            parse_mode="Markdown"
+        )
+
+
+@router.message(EditUserStates.waiting_for_new_name)
+async def process_edit_name(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    user_id = data.get('edit_user_id')
+
+    if message.text != ".":
+        await state.update_data(new_name=message.text)
+
+    await state.set_state(EditUserStates.waiting_for_new_role)
+    await message.answer(
+        "Выберите **новую роль** (или отправьте `.` чтобы оставить без изменений):\n\n"
+        "1 - Генеральный директор\n"
+        "2 - Инженер ПТО\n"
+        "3 - Прораб\n"
+        "4 - Электрик\n"
+        "5 - Рабочий\n"
+        "6 - Владелец\n\n"
+        "Введите номер роли:",
+        parse_mode="Markdown"
+    )
+
+
+@router.message(EditUserStates.waiting_for_new_role)
+async def process_edit_role(message: types.Message, state: FSMContext):
+    if message.text != ".":
+        role_map = {
+            "1": UserRole.GENERAL_DIRECTOR,
+            "2": UserRole.PTO,
+            "3": UserRole.FOREMAN,
+            "4": UserRole.ELECTRICIAN,
+            "5": UserRole.WORKER,
+            "6": UserRole.OWNER
+        }
+        if message.text not in role_map:
+            await message.answer("❌ Введите номер от 1 до 6")
+            return
+        await state.update_data(new_role=role_map[message.text])
+
+    await state.set_state(EditUserStates.waiting_for_new_object)
+    await message.answer(
+        "Введите **новый ID объекта** (или отправьте `.` чтобы оставить без изменений, `0` чтобы убрать):",
+        parse_mode="Markdown"
+    )
+
+
+@router.message(EditUserStates.waiting_for_new_object)
+async def process_edit_object(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    user_id = data.get('edit_user_id')
+
+    try:
+        if message.text == ".":
+            new_object = None
+        elif message.text == "0":
+            new_object = None
+        else:
+            new_object = int(message.text)
+    except ValueError:
+        await message.answer("❌ ID объекта должен быть числом, `.` или `0`.")
+        return
+
+    await state.update_data(new_object=new_object)
+
+    async for session in get_db():
+        user = await session.get(User, user_id)
+        if not user:
+            await message.answer(f"❌ Пользователь с ID `{user_id}` не найден.", parse_mode="Markdown")
+            await state.clear()
+            return
+
+        if 'new_name' in data and data['new_name'] != '.':
+            user.full_name = data['new_name']
+        if 'new_role' in data and data['new_role'] != '.':
+            user.role = data['new_role']
+        if new_object is not None:
+            user.object_id = new_object if new_object != 0 else None
+
+        await session.commit()
+
+        await message.answer(
+            f"✅ *Данные сотрудника обновлены!*\n\n"
+            f"📛 Имя: {user.full_name}\n"
+            f"🎭 Роль: {user.role.value if hasattr(user.role, 'value') else user.role}\n"
+            f"🏗️ Объект: {user.object_id or 'Не назначен'}",
+            parse_mode="Markdown"
+        )
+        await state.clear()
+
+
+# ========== УДАЛЕНИЕ СОТРУДНИКА ==========
+@router.message(Command("delete_user"))
+async def delete_user(message: types.Message):
+    """Удаляет сотрудника из системы."""
+    async for session in get_db():
+        current_user = await session.execute(
+            select(User).where(User.telegram_id == message.from_user.id)
+        )
+        current_user = current_user.scalar_one_or_none()
+        if not current_user or current_user.role != UserRole.OWNER:
+            await message.answer("❌ Только владелец может удалять сотрудников.")
+            return
+
+        parts = message.text.split()
+        if len(parts) < 2:
+            await message.answer(
+                "❌ Укажите ID сотрудника.\n"
+                "Пример: `/delete_user 123456789`",
+                parse_mode="Markdown"
+            )
+            return
+
+        try:
+            user_id = int(parts[1])
+        except ValueError:
+            await message.answer("❌ ID должен быть числом.")
+            return
+
+        result = await session.execute(
+            select(User).where(User.telegram_id == user_id)
+        )
+        user = result.scalar_one_or_none()
+
+        if not user:
+            await message.answer(f"❌ Пользователь с ID `{user_id}` не найден.", parse_mode="Markdown")
+            return
+
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [
+                InlineKeyboardButton(text="✅ Да, удалить", callback_data=f"confirm_delete_{user_id}"),
+                InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_delete")
+            ]
+        ])
+
+        await message.answer(
+            f"⚠️ *Подтверждение удаления*\n\n"
+            f"Вы уверены, что хотите удалить сотрудника?\n"
+            f"📛 Имя: {user.full_name}\n"
+            f"🆔 ID: `{user.telegram_id}`\n"
+            f"🎭 Роль: {user.role.value if hasattr(user.role, 'value') else user.role}\n\n"
+            f"Это действие **необратимо**!",
+            parse_mode="Markdown",
+            reply_markup=keyboard
+        )
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("confirm_delete_"))
+async def confirm_delete_user(callback: types.CallbackQuery):
+    """Подтверждение удаления сотрудника."""
+    user_id = int(callback.data.split("_")[2])
+
+    async for session in get_db():
+        user = await session.get(User, user_id)
+        if not user:
+            await callback.message.edit_text(f"❌ Пользователь с ID `{user_id}` не найден.")
+            await callback.answer()
+            return
+
+        await session.delete(user)
+        await session.commit()
+
+        await callback.message.edit_text(
+            f"✅ Сотрудник удалён!\n\n"
+            f"📛 Имя: {user.full_name}\n"
+            f"🆔 ID: `{user.telegram_id}`",
+            parse_mode="Markdown"
+        )
+        await callback.answer()
+
+
+@router.callback_query(lambda c: c.data == "cancel_delete")
+async def cancel_delete_user(callback: types.CallbackQuery):
+    """Отмена удаления сотрудника."""
+    await callback.message.edit_text("❌ Удаление отменено.")
+    await callback.answer()
