@@ -19,9 +19,11 @@ services:
         value: https://benefon-bot.onrender.com
       - key: ADMIN_IDS
         value: 215432040
+      - key: PORT
+        value: 10000
       - key: WEB_SERVER_HOST
         value: 0.0.0.0
       - key: WEB_SERVER_PORT
-        value: 8000
+        value: 10000
       - key: LOG_LEVEL
         value: INFO
