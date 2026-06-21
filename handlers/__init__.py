@@ -1,1 +1,1 @@
-from . import user, task, photo, material, tool, order, admin
+from . import user, task, photo, material, tool, order, admin, safety

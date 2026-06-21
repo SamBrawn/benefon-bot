@@ -11,7 +11,7 @@ from loguru import logger
 
 from config import settings
 from database import init_db
-from handlers import user, task, photo, material, tool, order, admin
+from handlers import user, task, photo, material, tool, order, admin, safety
 
 # Настройка логирования
 logger.add(
@@ -36,6 +36,7 @@ dp.include_router(material.router)
 dp.include_router(tool.router)
 dp.include_router(order.router)
 dp.include_router(admin.router)
+dp.include_router(safety.router)
 
 # Lifespan handler
 @asynccontextmanager
@@ -97,6 +98,32 @@ app.mount("/", web_app)
 
 
 # Расписания
+@scheduler.scheduled_job('cron', hour=10, minute=0, timezone="Europe/Moscow")
+async def send_safety_report():
+    """Ежедневный отчёт по инструктажу ТБ в 10:00"""
+    from handlers.safety import generate_daily_safety_report
+    from services.notification_service import NotificationService
+    
+    result = await generate_daily_safety_report()
+    if result:
+        pdf_path, report_text, passed, not_passed = result
+        service = NotificationService()
+        
+        # Отправляем гендиректору
+        await service.send_notification_to_role(
+            ["owner", "general_director"],
+            f"📋 Отчёт по инструктажу ТБ\n\n{report_text}"
+        )
+        
+        # Отправляем прорабам
+        await service.send_notification_to_role(
+            ["foreman"],
+            f"📋 Отчёт по инструктажу ТБ (бригада)\n\n{report_text}"
+        )
+        
+        logger.info(f"Safety report sent: {len(passed)} passed, {len(not_passed)} not passed")
+
+
 @scheduler.scheduled_job('cron', hour=9, minute=0)
 async def daily_digest():
     """Ежедневный дайджест в 09:00"""

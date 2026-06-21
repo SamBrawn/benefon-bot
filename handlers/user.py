@@ -5,7 +5,7 @@ from aiogram.fsm.context import FSMContext
 from sqlalchemy import select
 from database import get_db
 from models import User
-from datetime import datetime
+from datetime import datetime, date
 
 router = Router()
 
@@ -51,6 +51,11 @@ def get_role_keyboard(role: str = None):
 
 @router.message(Command("start"))
 async def start(message: types.Message):
+    # Проверяем инструктаж по ТБ
+    from handlers.safety import require_safety_briefing
+    if not await require_safety_briefing(message):
+        return
+    
     async for session in get_db():
         result = await session.execute(
             select(User).where(User.telegram_id == message.from_user.id)
