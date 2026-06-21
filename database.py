@@ -7,18 +7,15 @@ from loguru import logger
 # Формируем URL с asyncpg
 DATABASE_URL = settings.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://")
 
-# Создаем engine с настройками пула
+# Правильная настройка engine с NullPool
 # NullPool отключает пулинг - каждое соединение создаётся и закрывается отдельно
 # Это предотвращает ошибку "connection is closed" в async окружении
 engine = create_async_engine(
     DATABASE_URL,
     echo=False,
-    pool_size=5,
-    max_overflow=10,
+    poolclass=NullPool,      # Только poolclass, без pool_size и max_overflow
     pool_pre_ping=True,      # Проверка соединения перед использованием
-    pool_recycle=3600,        # Переподключение каждый час
-    pool_timeout=30,          # Таймаут получения соединения
-    poolclass=NullPool        # Отключаем пул для предотвращения "connection is closed"
+    pool_recycle=3600        # Переподключение каждый час
 )
 AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 Base = declarative_base()
