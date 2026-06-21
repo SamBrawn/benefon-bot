@@ -6,21 +6,19 @@ services:
       apt-get update
       apt-get install -y libjpeg-dev zlib1g-dev
       pip install --upgrade pip
-      pip install pydantic==2.5.0
-      pip install pydantic-core==2.14.1
       pip install -r requirements.txt
     startCommand: python main.py
     envVars:
       - key: BOT_TOKEN
-        sync: false
+        value: 8809330620:AAEdeLFew8SVJqzyXrxk554MxX1Lmc5QBHg
       - key: DATABASE_URL
-        sync: false
+        value: postgresql://neondb_owner:npg_t7iEC1loVAIX@ep-delicate-fog-aoiuu6q0.c-2.ap-southeast-1.aws.neon.tech/neondb
       - key: LOCAL_DEBUG
         value: false
       - key: WEBHOOK_URL
-        sync: false
+        value: https://benefon-bot.onrender.com
       - key: ADMIN_IDS
-        sync: false
+        value: 215432040
       - key: WEB_SERVER_HOST
         value: 0.0.0.0
       - key: WEB_SERVER_PORT
