@@ -3,33 +3,19 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 from sqlalchemy.pool import NullPool
 from config import settings
 from loguru import logger
-import re
 
 # Функция для очистки URL от sslmode
 def clean_db_url(url: str) -> str:
-    """Удаляет параметр sslmode из URL, если он есть."""
+    """Удаляет параметр sslmode из URL."""
     if "?" in url:
         base, params = url.split("?", 1)
-        # Удаляем sslmode из параметров
-        cleaned_params = "&".join(
-            [p for p in params.split("&") if not p.startswith("sslmode=")]
-        )
-        if cleaned_params:
-            return f"{base}?{cleaned_params}"
-        return base
+        cleaned_params = "&".join([p for p in params.split("&") if not p.startswith("sslmode=")])
+        return f"{base}?{cleaned_params}" if cleaned_params else base
     return url
 
-# Очищаем URL от sslmode
-RAW_DATABASE_URL = settings.DATABASE_URL
-CLEAN_DATABASE_URL = clean_db_url(RAW_DATABASE_URL)
+# Очищаем URL
+DATABASE_URL = clean_db_url(settings.DATABASE_URL).replace("postgresql://", "postgresql+asyncpg://")
 
-if RAW_DATABASE_URL != CLEAN_DATABASE_URL:
-    logger.info(f"Cleaned sslmode from DATABASE_URL")
-
-# Формируем URL для asyncpg
-DATABASE_URL = CLEAN_DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://")
-
-# Правильная настройка engine
 engine = create_async_engine(
     DATABASE_URL,
     echo=False,

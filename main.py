@@ -1,26 +1,15 @@
 import asyncio
-import logging
+import json
+import os
 from contextlib import asynccontextmanager
-from datetime import datetime
+from fastapi import FastAPI, Request, Response
 from aiogram import Bot, Dispatcher, types
 from aiogram.fsm.storage.memory import MemoryStorage
-from fastapi import FastAPI, Request
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-import uvicorn
 from loguru import logger
-
 from config import settings
-from database import init_db
+from database import engine, init_db
 from handlers import user, task, photo, material, tool, order, admin, safety
-
-# Настройка логирования
-logger.add(
-    "logs/bot.log",
-    rotation="10 MB",
-    retention="30 days",
-    encoding="utf-8",
-    level=settings.LOG_LEVEL
-)
 
 # Инициализация
 bot = Bot(token=settings.BOT_TOKEN)
@@ -28,7 +17,7 @@ storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
 scheduler = AsyncIOScheduler(timezone="Europe/Moscow")
 
-# Регистрация хэндлеров (выполняется 1 раз при импорте)
+# Регистрация роутеров
 dp.include_router(user.router)
 dp.include_router(task.router)
 dp.include_router(photo.router)
@@ -38,23 +27,25 @@ dp.include_router(order.router)
 dp.include_router(admin.router)
 dp.include_router(safety.router)
 
-# Lifespan handler
+# Глобальный обработчик ошибок FastAPI
+app = FastAPI(title="Benefon Bot")
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Global exception: {exc}")
+    return Response(content=json.dumps({"ok": False, "error": str(exc)}), status_code=200)
+
+# Lifespan
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Управление жизненным циклом приложения"""
-    # Startup
     logger.info("Starting Benefon Bot...")
-    
     try:
-        # Инициализация БД
         await init_db()
         logger.info("Database initialized")
         
-        # Запуск планировщика
         scheduler.start()
         logger.info("Scheduler started")
         
-        # Настройка webhook/polling
         if not settings.LOCAL_DEBUG:
             try:
                 await bot.set_webhook(
@@ -64,82 +55,44 @@ async def lifespan(app: FastAPI):
                 logger.info(f"Webhook set to {settings.WEBHOOK_URL}/webhook")
             except Exception as e:
                 logger.error(f"Failed to set webhook: {e}")
-                # Не падаем, продолжаем работу
         else:
             await bot.delete_webhook()
             asyncio.create_task(dp.start_polling(bot))
             logger.info("Bot started in polling mode")
         
-        yield  # Бот работает
+        yield
         
     except Exception as e:
         logger.error(f"Startup error: {e}")
-        # Не падаем, продолжаем работу
         yield
     finally:
-        # Shutdown
         logger.info("Shutting down...")
-        
         try:
-            if bot:
-                await bot.delete_webhook()
-                await bot.session.close()
+            await bot.delete_webhook()
+            await bot.session.close()
         except Exception as e:
             logger.error(f"Bot shutdown error: {e}")
         
         try:
-            if scheduler is not None:
+            if scheduler:
                 scheduler.shutdown()
                 logger.info("Scheduler stopped")
         except Exception as e:
             logger.error(f"Scheduler shutdown error: {e}")
         
         try:
-            from database import engine as db_engine
-            if db_engine:
-                await db_engine.dispose()
-                logger.info("Database engine disposed")
+            await engine.dispose()
+            logger.info("Database engine disposed")
         except Exception as e:
             logger.error(f"Database shutdown error: {e}")
         
         logger.info("✅ Shutdown complete")
 
-# Создание FastAPI приложения с lifespan
 app = FastAPI(title="Benefon Bot", lifespan=lifespan)
 
-# Webhook эндпоинт (должен быть перед монтированием веб-панели)
-from aiogram import types
-from fastapi import Request, Response
-import json
-
-# Глобальный обработчик ошибок для всех исключений в FastAPI
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    logger.error(f"Global exception: {exc}")
-    return Response(content=json.dumps({"ok": False, "error": str(exc)}), status_code=200)
-
-
-async def safe_feed_update(update: types.Update):
-    """Защищённая обработка обновлений - любая ошибка НЕ вызывает падение бота"""
-    try:
-        await dp.feed_update(bot, update)
-    except Exception as e:
-        # Любая ошибка здесь НЕ ВЫЗЫВАЕТ ПАДЕНИЕ БОТА
-        logger.error(f"Feed update error: {e}", exc_info=True)
-        # Пытаемся отправить сообщение об ошибке пользователю (если возможно)
-        try:
-            if update.message and update.message.from_user:
-                await bot.send_message(
-                    update.message.from_user.id,
-                    "⚠️ Произошла ошибка при обработке запроса. Пожалуйста, попробуйте ещё раз."
-                )
-        except:
-            pass
-
-
+# Webhook эндпоинт
 @app.post("/webhook")
 async def webhook(request: Request):
-    """Webhook для Telegram - полностью изолирован от ошибок"""
     try:
         body = await request.body()
         if not body:
@@ -148,11 +101,7 @@ async def webhook(request: Request):
         
         update_data = json.loads(body)
         update = types.Update(**update_data)
-        
-        # Запускаем обработку в отдельной таске с защитой от ошибок
         asyncio.create_task(safe_feed_update(update))
-        
-        # Сразу возвращаем 200 OK, даже если обработка упала
         return {"ok": True}
         
     except json.JSONDecodeError as e:
@@ -162,50 +111,22 @@ async def webhook(request: Request):
         logger.error(f"Webhook error: {e}")
         return {"ok": False, "error": str(e)}
 
-# Подключение веб-панели
-from web.app import app as web_app
-app.mount("/", web_app)
-
-
-# Расписания
-@scheduler.scheduled_job('cron', hour=9, minute=0)
-async def daily_digest():
-    """Ежедневный дайджест в 09:00"""
-    from services.notification_service import NotificationService
-    service = NotificationService()
-    await service.send_daily_digest()
-    logger.info("Daily digest sent")
-
-
-@scheduler.scheduled_job('cron', hour=20, minute=0)
-async def owner_report():
-    """Отчёт владельцу в 20:00"""
-    from services.notification_service import NotificationService
-    service = NotificationService()
-    await service.send_owner_report()
-    logger.info("Owner report sent")
-
-
-@scheduler.scheduled_job('cron', hour=0, minute=0)
-async def cleanup_photos():
-    """Очистка старых фото (раз в день)"""
-    from services.photo_service import PhotoService
-    PhotoService.cleanup_old_photos(days=90)
-    logger.info("Old photos cleaned up")
-
-
-# Запуск приложения (используется Render.com)
-import os
+async def safe_feed_update(update: types.Update):
+    try:
+        await dp.feed_update(bot, update)
+    except Exception as e:
+        logger.error(f"Feed update error: {e}", exc_info=True)
+        try:
+            if update.message and update.message.from_user:
+                await bot.send_message(
+                    update.message.from_user.id,
+                    "⚠️ Произошла ошибка. Попробуйте ещё раз."
+                )
+        except:
+            pass
 
 if __name__ == "__main__":
-    # Создаём папку для логов
-    os.makedirs("logs", exist_ok=True)
-    os.makedirs("uploads/photos", exist_ok=True)
-    os.makedirs("reports", exist_ok=True)
-
-    # Render использует переменную PORT
-    port = int(os.getenv("PORT", os.getenv("WEB_SERVER_PORT", "8000")))
+    import uvicorn
+    port = int(os.getenv("PORT", os.getenv("WEB_SERVER_PORT", 8000)))
     host = os.getenv("WEB_SERVER_HOST", "0.0.0.0")
-    
-    # Передаём объект app напрямую, чтобы uvicorn не переимпортировал модуль
-    uvicorn.run(app, host=host, port=port, reload=False)
+    uvicorn.run(app, host=host, port=port)
