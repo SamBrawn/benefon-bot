@@ -134,4 +134,4 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("PORT", 10000))
     host = os.getenv("WEB_SERVER_HOST", "0.0.0.0")
-    uvicorn.run("main:app", host=host, port=port, log_level="info")
+    uvicorn.run(app, host=host, port=port, log_level="info")
