@@ -1,19 +1,24 @@
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import NullPool
 from config import settings
+from loguru import logger
 
-# Заменяем postgresql:// на postgresql+asyncpg:// и sslmode=require на ssl=require
-DATABASE_URL = settings.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://").replace("sslmode=require", "ssl=require")
+# Формируем URL с asyncpg
+DATABASE_URL = settings.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://")
 
-# Настройки пула соединений для предотвращения "connection is closed"
+# Создаем engine с настройками пула
+# NullPool отключает пулинг - каждое соединение создаётся и закрывается отдельно
+# Это предотвращает ошибку "connection is closed" в async окружении
 engine = create_async_engine(
     DATABASE_URL,
     echo=False,
     pool_size=5,
     max_overflow=10,
-    pool_pre_ping=True,  # Проверяем соединение перед использованием
-    pool_recycle=3600,   # Переподключаем каждый час
-    pool_timeout=30      # Таймаут ожидания соединения
+    pool_pre_ping=True,      # Проверка соединения перед использованием
+    pool_recycle=3600,        # Переподключение каждый час
+    pool_timeout=30,          # Таймаут получения соединения
+    poolclass=NullPool        # Отключаем пул для предотвращения "connection is closed"
 )
 AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 Base = declarative_base()
