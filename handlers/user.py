@@ -5,6 +5,7 @@ from aiogram.fsm.context import FSMContext
 from sqlalchemy import select
 from database import get_db
 from models import User
+from keyboards import get_owner_keyboard, get_main_menu_keyboard as get_role_keyboard_from_keyboards
 from datetime import datetime, date
 
 router = Router()
@@ -63,12 +64,18 @@ async def start(message: types.Message):
         user = result.scalar_one_or_none()
         
         if user:
+            # Для владельца используем специальную клавиатуру
+            if user.role == "owner":
+                keyboard = get_owner_keyboard()
+            else:
+                keyboard = get_role_keyboard(user.role)
+            
             await message.answer(
                 f"👋 С возвращением, {user.full_name}!\n\n"
                 f"🏗️ Роль: {user.role}\n"
                 f"🆔 ID: {user.telegram_id}\n\n"
                 "Выберите действие:",
-                reply_markup=get_role_keyboard(user.role)
+                reply_markup=keyboard
             )
         else:
             await message.answer(

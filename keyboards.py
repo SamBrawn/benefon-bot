@@ -139,3 +139,23 @@ def get_cancel_keyboard() -> ReplyKeyboardMarkup:
         keyboard=[[KeyboardButton(text="❌ Отмена")]],
         resize_keyboard=True
     )
+
+
+def get_owner_keyboard() -> ReplyKeyboardMarkup:
+    """Меню для владельца"""
+    buttons = [
+        [KeyboardButton(text="📋 Мои задачи")],
+        [KeyboardButton(text="➕ Новая задача")],
+        [KeyboardButton(text="📊 Отчёт")],
+        [KeyboardButton(text="📦 Материалы")],
+        [KeyboardButton(text="🔧 Инструменты")],
+        [KeyboardButton(text="👥 Управление командой")],
+        [KeyboardButton(text="🔑 Веб-панель")],
+        [KeyboardButton(text="👤 Мой профиль")]
+    ]
+    
+    return ReplyKeyboardMarkup(
+        keyboard=buttons,
+        resize_keyboard=True,
+        input_field_placeholder="Выберите действие..."
+    )
