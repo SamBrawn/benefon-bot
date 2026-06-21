@@ -44,32 +44,48 @@ async def lifespan(app: FastAPI):
     """Управление жизненным циклом приложения"""
     # Startup
     logger.info("Starting Benefon Bot...")
-
-    # Инициализация БД
-    await init_db()
-    logger.info("Database initialized")
-
-    # Запуск планировщика
-    scheduler.start()
-    logger.info("Scheduler started")
-
-    # Настройка webhook/polling
-    if not settings.LOCAL_DEBUG:
-        await bot.set_webhook(url=f"{settings.WEBHOOK_URL}/webhook")
-        logger.info(f"Webhook set to {settings.WEBHOOK_URL}/webhook")
-    else:
-        await bot.delete_webhook()
-        asyncio.create_task(dp.start_polling(bot))
-        logger.info("Bot started in polling mode")
     
-    yield  # Бот работает
-    
-    # Shutdown
-    logger.info("Shutting down...")
-    await bot.delete_webhook()
-    await bot.session.close()
-    scheduler.shutdown()
-    logger.info("✅ Shutdown complete")
+    try:
+        # Инициализация БД
+        await init_db()
+        logger.info("Database initialized")
+        
+        # Запуск планировщика
+        scheduler.start()
+        logger.info("Scheduler started")
+        
+        # Настройка webhook/polling
+        if not settings.LOCAL_DEBUG:
+            try:
+                await bot.set_webhook(
+                    url=f"{settings.WEBHOOK_URL}/webhook",
+                    allowed_updates=["message", "callback_query"]
+                )
+                logger.info(f"Webhook set to {settings.WEBHOOK_URL}/webhook")
+            except Exception as e:
+                logger.error(f"Failed to set webhook: {e}")
+                # Не падаем, продолжаем работу
+        else:
+            await bot.delete_webhook()
+            asyncio.create_task(dp.start_polling(bot))
+            logger.info("Bot started in polling mode")
+        
+        yield  # Бот работает
+        
+    except Exception as e:
+        logger.error(f"Startup error: {e}")
+        # Не падаем, продолжаем работу
+        yield
+    finally:
+        # Shutdown
+        logger.info("Shutting down...")
+        try:
+            await bot.delete_webhook()
+            await bot.session.close()
+            scheduler.shutdown()
+            logger.info("✅ Shutdown complete")
+        except Exception as e:
+            logger.error(f"Shutdown error: {e}")
 
 # Создание FastAPI приложения с lifespan
 app = FastAPI(title="Benefon Bot", lifespan=lifespan)
@@ -84,12 +100,27 @@ async def webhook(request: Request):
     """Webhook для Telegram"""
     try:
         body = await request.body()
+        if not body:
+            logger.warning("Empty webhook request body")
+            return {"ok": False, "error": "Empty body"}
+        
         update_data = json.loads(body)
         update = types.Update(**update_data)
-        await dp.feed_update(bot, update)
+        
+        try:
+            await dp.feed_update(bot, update)
+        except Exception as e:
+            logger.error(f"Feed update error: {e}")
+            # Не падаем, продолжаем работу
+            return {"ok": False, "error": str(e)}
+        
         return {"ok": True}
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON decode error: {e}")
+        return {"ok": False, "error": "Invalid JSON"}
     except Exception as e:
         logger.error(f"Webhook error: {e}")
+        # НЕ ПАДАЕМ, возвращаем 200 OK
         return {"ok": False, "error": str(e)}
 
 # Подключение веб-панели
