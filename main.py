@@ -19,15 +19,27 @@ dp = Dispatcher(storage=storage)
 # Инициализация планировщика
 scheduler = AsyncIOScheduler(timezone="Europe/Moscow")
 
-# Регистрация роутеров
-dp.include_router(user.router)
-dp.include_router(task.router)
-dp.include_router(photo.router)
-dp.include_router(material.router)
-dp.include_router(tool.router)
-dp.include_router(order.router)
-dp.include_router(admin.router)
-dp.include_router(safety.router)
+# Регистрация роутеров (с защитой от дублирования)
+routers_to_include = [
+    ("user", user.router),
+    ("task", task.router),
+    ("photo", photo.router),
+    ("material", material.router),
+    ("tool", tool.router),
+    ("order", order.router),
+    ("admin", admin.router),
+    ("safety", safety.router),
+]
+
+for router_name, router_instance in routers_to_include:
+    try:
+        dp.include_router(router_instance)
+        logger.info(f"Router '{router_name}' registered")
+    except RuntimeError as e:
+        if "already attached" in str(e):
+            logger.warning(f"Router '{router_name}' already attached, skipping")
+        else:
+            raise
 
 # Lifespan
 @asynccontextmanager
