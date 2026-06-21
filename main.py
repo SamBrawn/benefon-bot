@@ -11,10 +11,12 @@ from config import settings
 from database import engine, init_db
 from handlers import user, task, photo, material, tool, order, admin, safety
 
-# Инициализация
+# Инициализация бота
 bot = Bot(token=settings.BOT_TOKEN)
 storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
+
+# Инициализация планировщика
 scheduler = AsyncIOScheduler(timezone="Europe/Moscow")
 
 # Регистрация роутеров
@@ -27,25 +29,20 @@ dp.include_router(order.router)
 dp.include_router(admin.router)
 dp.include_router(safety.router)
 
-# Глобальный обработчик ошибок FastAPI
-app = FastAPI(title="Benefon Bot")
-
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    logger.error(f"Global exception: {exc}")
-    return Response(content=json.dumps({"ok": False, "error": str(exc)}), status_code=200)
-
 # Lifespan
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting Benefon Bot...")
     try:
+        # Инициализация БД
         await init_db()
         logger.info("Database initialized")
         
+        # Запуск планировщика
         scheduler.start()
         logger.info("Scheduler started")
         
+        # Установка вебхука
         if not settings.LOCAL_DEBUG:
             try:
                 await bot.set_webhook(
@@ -67,19 +64,24 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         logger.info("Shutting down...")
+        
+        # Остановка бота
         try:
             await bot.delete_webhook()
             await bot.session.close()
+            logger.info("Bot stopped")
         except Exception as e:
             logger.error(f"Bot shutdown error: {e}")
         
+        # Остановка планировщика
         try:
-            if scheduler:
+            if scheduler and scheduler.running:
                 scheduler.shutdown()
                 logger.info("Scheduler stopped")
         except Exception as e:
             logger.error(f"Scheduler shutdown error: {e}")
         
+        # Закрытие соединения с БД
         try:
             await engine.dispose()
             logger.info("Database engine disposed")
@@ -89,6 +91,12 @@ async def lifespan(app: FastAPI):
         logger.info("✅ Shutdown complete")
 
 app = FastAPI(title="Benefon Bot", lifespan=lifespan)
+
+# Глобальный обработчик ошибок
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Global exception: {exc}")
+    return Response(content=json.dumps({"ok": False, "error": str(exc)}), status_code=200)
 
 # Webhook эндпоинт
 @app.post("/webhook")
@@ -125,6 +133,35 @@ async def safe_feed_update(update: types.Update):
         except:
             pass
 
+# Подключение веб-панели
+from web.app import app as web_app
+app.mount("/", web_app)
+
+# Расписания
+@scheduler.scheduled_job('cron', hour=9, minute=0)
+async def daily_digest():
+    """Ежедневный дайджест в 09:00"""
+    from services.notification_service import NotificationService
+    service = NotificationService()
+    await service.send_daily_digest()
+    logger.info("Daily digest sent")
+
+@scheduler.scheduled_job('cron', hour=20, minute=0)
+async def owner_report():
+    """Отчёт владельцу в 20:00"""
+    from services.notification_service import NotificationService
+    service = NotificationService()
+    await service.send_owner_report()
+    logger.info("Owner report sent")
+
+@scheduler.scheduled_job('cron', hour=0, minute=0)
+async def cleanup_photos():
+    """Очистка старых фото (раз в день)"""
+    from services.photo_service import PhotoService
+    PhotoService.cleanup_old_photos(days=90)
+    logger.info("Old photos cleaned up")
+
+# Запуск приложения (используется Render.com)
 if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("PORT", os.getenv("WEB_SERVER_PORT", 8000)))
