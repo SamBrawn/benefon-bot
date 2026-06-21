@@ -25,6 +25,13 @@ class ObjectCreation(StatesGroup):
     waiting_for_address = State()
 
 
+# === FSM для редактирования пользователя ===
+class EditUserStates(StatesGroup):
+    waiting_for_new_name = State()
+    waiting_for_new_role = State()
+    waiting_for_new_object = State()
+
+
 # === /add_user — добавление пользователя (только владелец) ===
 @router.message(Command("add_user"))
 async def cmd_add_user(message: types.Message, state: FSMContext):
@@ -350,11 +357,6 @@ async def edit_user_start(message: types.Message, state: FSMContext):
             return
 
         await state.update_data(edit_user_id=user_id)
-
-        class EditUserStates(StatesGroup):
-            waiting_for_new_name = State()
-            waiting_for_new_role = State()
-            waiting_for_new_object = State()
 
         await state.set_state(EditUserStates.waiting_for_new_name)
         await message.answer(
