@@ -3,29 +3,51 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 from sqlalchemy.pool import NullPool
 from config import settings
 from loguru import logger
+import re
 
-# Формируем URL с asyncpg
-DATABASE_URL = settings.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://")
+# Функция для очистки URL от sslmode
+def clean_db_url(url: str) -> str:
+    """Удаляет параметр sslmode из URL, если он есть."""
+    if "?" in url:
+        base, params = url.split("?", 1)
+        # Удаляем sslmode из параметров
+        cleaned_params = "&".join(
+            [p for p in params.split("&") if not p.startswith("sslmode=")]
+        )
+        if cleaned_params:
+            return f"{base}?{cleaned_params}"
+        return base
+    return url
 
-# Правильная настройка engine с NullPool
-# NullPool отключает пулинг - каждое соединение создаётся и закрывается отдельно
-# SSL параметры передаём через connect_args
+# Очищаем URL от sslmode
+RAW_DATABASE_URL = settings.DATABASE_URL
+CLEAN_DATABASE_URL = clean_db_url(RAW_DATABASE_URL)
+
+if RAW_DATABASE_URL != CLEAN_DATABASE_URL:
+    logger.info(f"Cleaned sslmode from DATABASE_URL")
+
+# Формируем URL для asyncpg
+DATABASE_URL = CLEAN_DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://")
+
+# Правильная настройка engine
 engine = create_async_engine(
     DATABASE_URL,
     echo=False,
-    poolclass=NullPool,      # Только poolclass, без pool_size и max_overflow
-    pool_pre_ping=True,      # Проверка соединения перед использованием
-    pool_recycle=3600,       # Переподключение каждый час
-    connect_args={
-        "ssl": True,         # Включаем SSL
-        "server_settings": {
-            "statement_timeout": "30000"  # 30 секунд таймаут
-        }
-    }
+    poolclass=NullPool,
+    pool_pre_ping=True,
+    pool_recycle=3600,
+    connect_args={"ssl": True}
 )
-AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-Base = declarative_base()
 
+AsyncSessionLocal = sessionmaker(
+    engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
+    autocommit=False,
+    autoflush=False
+)
+
+Base = declarative_base()
 
 async def get_db():
     async with AsyncSessionLocal() as session:
@@ -38,8 +60,8 @@ async def get_db():
         finally:
             await session.close()
 
-
 async def init_db():
-    """Создание всех таблиц (для разработки)"""
+    from models import Base as ModelsBase
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(ModelsBase.metadata.create_all)
+    logger.info("Database initialized")
