@@ -92,12 +92,37 @@ app = FastAPI(title="Benefon Bot", lifespan=lifespan)
 
 # Webhook эндпоинт (должен быть перед монтированием веб-панели)
 from aiogram import types
-from fastapi import Request
+from fastapi import Request, Response
 import json
+
+# Глобальный обработчик ошибок для всех исключений в FastAPI
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Global exception: {exc}")
+    return Response(content=json.dumps({"ok": False, "error": str(exc)}), status_code=200)
+
+
+async def safe_feed_update(update: types.Update):
+    """Защищённая обработка обновлений - любая ошибка НЕ вызывает падение бота"""
+    try:
+        await dp.feed_update(bot, update)
+    except Exception as e:
+        # Любая ошибка здесь НЕ ВЫЗЫВАЕТ ПАДЕНИЕ БОТА
+        logger.error(f"Feed update error: {e}", exc_info=True)
+        # Пытаемся отправить сообщение об ошибке пользователю (если возможно)
+        try:
+            if update.message and update.message.from_user:
+                await bot.send_message(
+                    update.message.from_user.id,
+                    "⚠️ Произошла ошибка при обработке запроса. Пожалуйста, попробуйте ещё раз."
+                )
+        except:
+            pass
+
 
 @app.post("/webhook")
 async def webhook(request: Request):
-    """Webhook для Telegram"""
+    """Webhook для Telegram - полностью изолирован от ошибок"""
     try:
         body = await request.body()
         if not body:
@@ -107,20 +132,17 @@ async def webhook(request: Request):
         update_data = json.loads(body)
         update = types.Update(**update_data)
         
-        try:
-            await dp.feed_update(bot, update)
-        except Exception as e:
-            logger.error(f"Feed update error: {e}")
-            # Не падаем, продолжаем работу
-            return {"ok": False, "error": str(e)}
+        # Запускаем обработку в отдельной таске с защитой от ошибок
+        asyncio.create_task(safe_feed_update(update))
         
+        # Сразу возвращаем 200 OK, даже если обработка упала
         return {"ok": True}
+        
     except json.JSONDecodeError as e:
         logger.error(f"JSON decode error: {e}")
         return {"ok": False, "error": "Invalid JSON"}
     except Exception as e:
         logger.error(f"Webhook error: {e}")
-        # НЕ ПАДАЕМ, возвращаем 200 OK
         return {"ok": False, "error": str(e)}
 
 # Подключение веб-панели
