@@ -9,13 +9,19 @@ DATABASE_URL = settings.DATABASE_URL.replace("postgresql://", "postgresql+asyncp
 
 # Правильная настройка engine с NullPool
 # NullPool отключает пулинг - каждое соединение создаётся и закрывается отдельно
-# Это предотвращает ошибку "connection is closed" в async окружении
+# SSL параметры передаём через connect_args
 engine = create_async_engine(
     DATABASE_URL,
     echo=False,
     poolclass=NullPool,      # Только poolclass, без pool_size и max_overflow
     pool_pre_ping=True,      # Проверка соединения перед использованием
-    pool_recycle=3600        # Переподключение каждый час
+    pool_recycle=3600,       # Переподключение каждый час
+    connect_args={
+        "ssl": True,         # Включаем SSL
+        "server_settings": {
+            "statement_timeout": "30000"  # 30 секунд таймаут
+        }
+    }
 )
 AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 Base = declarative_base()
