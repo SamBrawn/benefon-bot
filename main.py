@@ -79,13 +79,30 @@ async def lifespan(app: FastAPI):
     finally:
         # Shutdown
         logger.info("Shutting down...")
+        
         try:
-            await bot.delete_webhook()
-            await bot.session.close()
-            scheduler.shutdown()
-            logger.info("✅ Shutdown complete")
+            if bot:
+                await bot.delete_webhook()
+                await bot.session.close()
         except Exception as e:
-            logger.error(f"Shutdown error: {e}")
+            logger.error(f"Bot shutdown error: {e}")
+        
+        try:
+            if scheduler is not None:
+                scheduler.shutdown()
+                logger.info("Scheduler stopped")
+        except Exception as e:
+            logger.error(f"Scheduler shutdown error: {e}")
+        
+        try:
+            from database import engine as db_engine
+            if db_engine:
+                await db_engine.dispose()
+                logger.info("Database engine disposed")
+        except Exception as e:
+            logger.error(f"Database shutdown error: {e}")
+        
+        logger.info("✅ Shutdown complete")
 
 # Создание FastAPI приложения с lifespan
 app = FastAPI(title="Benefon Bot", lifespan=lifespan)
