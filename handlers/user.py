@@ -92,12 +92,14 @@ async def start(message: types.Message):
 
 
 @router.message(Command("help"))
-async def help_command(message: types.Message):
+async def help_command(message: types.Message, state: FSMContext):
+    await state.clear()
     help_text = (
         "🤖 Benefon Bot — Помощь\n\n"
         "📋 Основные команды:\n"
         "/start — Главное меню\n"
-        "/help — Помощь\n\n"
+        "/help — Помощь\n"
+        "/cancel — Отмена текущего действия\n\n"
         "📌 Для всех:\n"
         "/my_tasks — Мои задачи\n"
         "/web_login — Веб-панель\n\n"
@@ -122,9 +124,36 @@ async def help_command(message: types.Message):
         "👑 Владелец:\n"
         "/add_user — Добавить сотрудника\n"
         "/add_object — Добавить объект\n"
-        "/owner_approve [id] — Утвердить заявку"
+        "/owner_approve [id] — Утвердить заявку\n"
+        "/list_users — Список сотрудников\n"
+        "/edit_user [ID] — Редактировать\n"
+        "/delete_user [ID] — Удалить"
     )
     await message.answer(help_text)
+
+
+@router.message(Command("cancel"))
+async def cancel_command(message: types.Message, state: FSMContext):
+    """Отмена текущего действия и сброс FSM"""
+    await state.clear()
+    
+    # Получаем пользователя для показа правильной клавиатуры
+    async for session in get_db():
+        result = await session.execute(
+            select(User).where(User.telegram_id == message.from_user.id)
+        )
+        user = result.scalar_one_or_none()
+        
+        if user and user.role == "owner":
+            keyboard = get_owner_keyboard()
+        else:
+            keyboard = get_role_keyboard(user.role if user else None)
+    
+    await message.answer(
+        "✅ Действие отменено.\n"
+        "Вы можете продолжить работу.",
+        reply_markup=keyboard
+    )
 
 
 # === ОБРАБОТЧИКИ КНОПОК ===
