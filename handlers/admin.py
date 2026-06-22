@@ -343,7 +343,7 @@ async def edit_user_start(message: types.Message, state: FSMContext):
         if len(parts) < 2:
             await message.answer(
                 "❌ Укажите ID сотрудника.\n"
-                "Пример: `/edit_user 123456789`",
+                "Пример: `/edituser 123456789`",
                 parse_mode="Markdown"
             )
             return
@@ -483,7 +483,7 @@ async def delete_user(message: types.Message, state: FSMContext):
         if len(parts) < 2:
             await message.answer(
                 "❌ Укажите ID сотрудника.\n"
-                "Пример: `/delete_user 123456789`",
+                "Пример: `/deleteuser 123456789`",
                 parse_mode="Markdown"
             )
             return
