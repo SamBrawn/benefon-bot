@@ -14,16 +14,8 @@ services:
       - key: DATABASE_URL
         value: postgresql://neondb_owner:npg_t7iEC1loVAIX@ep-delicate-fog-aoiuu6q0.c-2.ap-southeast-1.aws.neon.tech/neondb
       - key: LOCAL_DEBUG
-        value: false
-      - key: WEBHOOK_URL
-        value: https://benefon-bot.onrender.com
+        value: true
       - key: ADMIN_IDS
         value: 215432040
-      - key: PORT
-        value: 10000
-      - key: WEB_SERVER_HOST
-        value: 0.0.0.0
-      - key: WEB_SERVER_PORT
-        value: 10000
       - key: LOG_LEVEL
         value: INFO
