@@ -1,17 +1,16 @@
 import asyncio
 import os
-import fcntl
-from aiogram import Bot, Dispatcher
+import sys
+from aiogram import Bot, Dispatcher, types
+from aiogram.filters import Command
 from aiogram.fsm.storage.memory import MemoryStorage
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from fastapi import FastAPI
-import uvicorn
 from loguru import logger
 from config import settings
 from database import init_db
 from handlers import user, task, photo, material, tool, order, admin, safety
 
-# Инициализация бота
+# Инициализация
 bot = Bot(token=settings.BOT_TOKEN)
 storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
@@ -27,36 +26,23 @@ dp.include_router(order.router)
 dp.include_router(admin.router)
 dp.include_router(safety.router)
 
-# PID файл для гарантии единственного экземпляра
-PID_FILE = "/tmp/benefon_bot.pid"
+# Простой тестовый обработчик
+@dp.message(Command("start"))
+async def start_cmd(message: types.Message):
+    logger.info(f"✅ Start command received from {message.from_user.id}")
+    await message.answer("✅ Бот работает! Ваш ID: " + str(message.from_user.id))
 
-def check_single_instance():
-    """Проверяет, что запущен только один экземпляр бота"""
-    try:
-        fp = open(PID_FILE, 'w')
-        fcntl.flock(fp, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        fp.write(str(os.getpid()))
-        fp.flush()
-        logger.info(f"Single instance lock acquired (PID: {os.getpid()})")
-        return True
-    except IOError:
-        logger.error("Another instance of the bot is already running. Exiting.")
-        return False
+@dp.message(Command("ping"))
+async def ping_cmd(message: types.Message):
+    logger.info(f"✅ Ping command received from {message.from_user.id}")
+    await message.answer("🏓 Pong!")
 
-# Инициализация FastAPI для health checks (чтобы Render видел открытый порт)
-app = FastAPI(title="Benefon Bot Health Check")
+@dp.message()
+async def echo_all(message: types.Message):
+    logger.info(f"✅ Echo: {message.text} from {message.from_user.id}")
+    await message.answer(f"Получено: {message.text}")
 
-@app.get("/")
-@app.get("/health")
-async def health_check():
-    """Health check endpoint для Render"""
-    return {"status": "ok", "message": "Benefon Bot is running"}
-
-async def start_bot():
-    """Запускает бота в режиме polling"""
-    if not check_single_instance():
-        return
-    
+async def on_startup():
     logger.info("Starting Benefon Bot...")
     await init_db()
     logger.info("Database initialized")
@@ -65,22 +51,12 @@ async def start_bot():
     await bot.delete_webhook()
     logger.info("Webhook deleted")
     logger.info("✅ Benefon Bot started in polling mode!")
-    
-    await dp.start_polling(bot)
-
-async def start_webserver():
-    """Запускает веб-сервер для health checks"""
-    config = uvicorn.Config(app, host="0.0.0.0", port=10000, log_level="info")
-    server = uvicorn.Server(config)
-    logger.info("Starting health check server on port 10000...")
-    await server.serve()
 
 async def main():
-    """Запускает бота и веб-сервер параллельно"""
-    await asyncio.gather(
-        start_bot(),
-        start_webserver()
-    )
+    await on_startup()
+    logger.info("🚀 Bot is ready to receive updates!")
+    await dp.start_polling(bot, skip_updates=True)
 
 if __name__ == "__main__":
+    logger.info("🚀 Starting application...")
     asyncio.run(main())

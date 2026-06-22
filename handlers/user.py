@@ -8,9 +8,16 @@ from database import get_db
 from models import User
 from keyboards import get_owner_keyboard, get_main_menu_keyboard as get_role_keyboard_from_keyboards
 from datetime import datetime, date
+from loguru import logger
 
 logger = logging.getLogger(__name__)
 router = Router()
+
+# Тестовые обработчики для диагностики
+@router.message(Command("start"))
+async def start_handler(message: types.Message):
+    logger.info(f"🔥 START handler triggered for {message.from_user.id}")
+    await message.answer("🔥 START handler works!")
 
 # Главное меню (для незарегистрированных)
 def get_main_keyboard():
