@@ -1,3 +1,4 @@
+import logging
 from aiogram import Router, types
 from aiogram.filters import Command
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
@@ -8,6 +9,7 @@ from models import User
 from keyboards import get_owner_keyboard, get_main_menu_keyboard as get_role_keyboard_from_keyboards
 from datetime import datetime, date
 
+logger = logging.getLogger(__name__)
 router = Router()
 
 # Главное меню (для незарегистрированных)
@@ -52,43 +54,62 @@ def get_role_keyboard(role: str = None):
 
 @router.message(Command("start"))
 async def start(message: types.Message):
-    # Проверяем инструктаж по ТБ
-    from handlers.safety import require_safety_briefing
-    if not await require_safety_briefing(message):
-        return
-    
-    async for session in get_db():
-        result = await session.execute(
-            select(User).where(User.telegram_id == message.from_user.id)
+    """Обработчик команды /start с логированием"""
+    try:
+        # Логируем вызов команды
+        logger.info(
+            f"Received /start from user_id={message.from_user.id}, "
+            f"username=@{message.from_user.username}, "
+            f"full_name={message.from_user.full_name}"
         )
-        user = result.scalar_one_or_none()
         
-        if user:
-            # Для владельца используем специальную клавиатуру
-            if user.role == "owner":
-                keyboard = get_owner_keyboard()
-            else:
-                keyboard = get_role_keyboard(user.role)
+        # Отправляем тестовое сообщение для проверки работоспособности
+        await message.answer("✅ Бот работает! Обработка команды /start...")
+        
+        # Проверяем инструктаж по ТБ
+        from handlers.safety import require_safety_briefing
+        if not await require_safety_briefing(message):
+            logger.info(f"User {message.from_user.id} needs safety briefing")
+            return
+        
+        async for session in get_db():
+            result = await session.execute(
+                select(User).where(User.telegram_id == message.from_user.id)
+            )
+            user = result.scalar_one_or_none()
             
-            await message.answer(
-                f"👋 С возвращением, {user.full_name}!\n\n"
-                f"🏗️ Роль: {user.role}\n"
-                f"🆔 ID: {user.telegram_id}\n\n"
-                "Выберите действие:",
-                reply_markup=keyboard
-            )
-        else:
-            await message.answer(
-                "👋 Добро пожаловать в Benefon Bot!\n\n"
-                "🏗️ Строительная компания «Бенефон»\n\n"
-                "❌ Вы не зарегистрированы.\n"
-                "Обратитесь к владельцу для получения доступа.\n\n"
-                "Доступные команды:\n"
-                "/start — Главное меню\n"
-                "/help — Помощь\n"
-                "/web_login — Веб-панель",
-                reply_markup=get_main_keyboard()
-            )
+            if user:
+                logger.info(f"Registered user {message.from_user.id} started bot, role={user.role}")
+                
+                # Для владельца используем специальную клавиатуру
+                if user.role == "owner":
+                    keyboard = get_owner_keyboard()
+                else:
+                    keyboard = get_role_keyboard(user.role)
+                
+                await message.answer(
+                    f"👋 С возвращением, {user.full_name}!\n\n"
+                    f"🏗️ Роль: {user.role}\n"
+                    f"🆔 ID: {user.telegram_id}\n\n"
+                    "Выберите действие:",
+                    reply_markup=keyboard
+                )
+            else:
+                logger.info(f"Unregistered user {message.from_user.id} started bot")
+                await message.answer(
+                    "👋 Добро пожаловать в Benefon Bot!\n\n"
+                    "🏗️ Строительная компания «Бенефон»\n\n"
+                    "❌ Вы не зарегистрированы.\n"
+                    "Обратитесь к владельцу для получения доступа.\n\n"
+                    "Доступные команды:\n"
+                    "/start — Главное меню\n"
+                    "/help — Помощь\n"
+                    "/web_login — Веб-панель",
+                    reply_markup=get_main_keyboard()
+                )
+    except Exception as e:
+        logger.error(f"Error in /start handler: {e}", exc_info=True)
+        await message.answer("❌ Произошла ошибка. Попробуйте позже.")
 
 
 @router.message(Command("help"))
