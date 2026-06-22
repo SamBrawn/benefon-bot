@@ -14,7 +14,7 @@ services:
       - key: DATABASE_URL
         value: postgresql://neondb_owner:npg_t7iEC1loVAIX@ep-delicate-fog-aoiuu6q0.c-2.ap-southeast-1.aws.neon.tech/neondb
       - key: LOCAL_DEBUG
-        value: true
+        value: false
       - key: ADMIN_IDS
         value: 215432040
       - key: LOG_LEVEL
