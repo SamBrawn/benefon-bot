@@ -54,3 +54,6 @@ htmlcov/
 dist/
 build/
 *.egg-info/
+
+# Temporary scripts
+clean_users.py

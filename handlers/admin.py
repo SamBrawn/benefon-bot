@@ -11,6 +11,25 @@ import logging
 logger = logging.getLogger(__name__)
 router = Router()
 
+# Словари для отображения ролей на русском языке
+ROLE_NAMES = {
+    "owner": "Владелец",
+    "general_director": "Генеральный директор",
+    "pto": "Инженер ПТО",
+    "foreman": "Прораб",
+    "electrician": "Электрик",
+    "worker": "Рабочий"
+}
+
+ROLE_EMOJI = {
+    "owner": "👑",
+    "general_director": "💼",
+    "pto": "📐",
+    "foreman": "👷",
+    "electrician": "⚡",
+    "worker": "🔨"
+}
+
 
 # === FSM для добавления пользователя ===
 class UserRegistration(StatesGroup):
@@ -307,17 +326,12 @@ async def list_users(message: types.Message, state: FSMContext):
 
         text = "👥 *Список сотрудников:*\n\n"
         for user in users:
-            role_emoji = {
-                "owner": "👑",
-                "general_director": "💼",
-                "pto": "📐",
-                "foreman": "👷",
-                "electrician": "⚡",
-                "worker": "🔨"
-            }.get(user.role.value if hasattr(user.role, 'value') else user.role, "❓")
-            text += f"{role_emoji} *{user.full_name}*\n"
+            role_key = user.role.value if hasattr(user.role, 'value') else user.role
+            emoji = ROLE_EMOJI.get(role_key, "❓")
+            role_display = ROLE_NAMES.get(role_key, role_key)
+            text += f"{emoji} *{user.full_name}*\n"
             text += f"   🆔 ID: `{user.telegram_id}`\n"
-            text += f"   🎭 Роль: {user.role.value if hasattr(user.role, 'value') else user.role}\n"
+            text += f"   🎭 Роль: {role_display}\n"
             if user.object_id:
                 text += f"   🏗️ Объект: {user.object_id}\n"
             text += "\n"
@@ -366,10 +380,11 @@ async def edit_user_start(message: types.Message, state: FSMContext):
         await state.update_data(edit_user_id=user_id)
 
         await state.set_state(EditUserStates.waiting_for_new_name)
+        role_display = ROLE_NAMES.get(user.role.value if hasattr(user.role, 'value') else user.role, user.role)
         await message.answer(
             f"✏️ *Редактирование сотрудника*\n\n"
             f"📛 Текущее имя: {user.full_name}\n"
-            f"🎭 Текущая роль: {user.role.value if hasattr(user.role, 'value') else user.role}\n"
+            f"🎭 Текущая роль: {role_display}\n"
             f"🏗️ Текущий объект: {user.object_id or 'Не назначен'}\n\n"
             f"Введите **новое имя** (или отправьте `.` чтобы оставить без изменений):",
             parse_mode="Markdown"
@@ -510,12 +525,13 @@ async def delete_user(message: types.Message, state: FSMContext):
             ]
         ])
 
+        role_display = ROLE_NAMES.get(user.role.value if hasattr(user.role, 'value') else user.role, user.role)
         await message.answer(
             f"⚠️ *Подтверждение удаления*\n\n"
             f"Вы уверены, что хотите удалить сотрудника?\n"
             f"📛 Имя: {user.full_name}\n"
             f"🆔 ID: `{user.telegram_id}`\n"
-            f"🎭 Роль: {user.role.value if hasattr(user.role, 'value') else user.role}\n\n"
+            f"🎭 Роль: {role_display}\n\n"
             f"Это действие **необратимо**!",
             parse_mode="Markdown",
             reply_markup=keyboard
