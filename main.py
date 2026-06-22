@@ -26,21 +26,8 @@ dp.include_router(order.router)
 dp.include_router(admin.router)
 dp.include_router(safety.router)
 
-# Простой тестовый обработчик
-@dp.message(Command("start"))
-async def start_cmd(message: types.Message):
-    logger.info(f"✅ Start command received from {message.from_user.id}")
-    await message.answer("✅ Бот работает! Ваш ID: " + str(message.from_user.id))
-
-@dp.message(Command("ping"))
-async def ping_cmd(message: types.Message):
-    logger.info(f"✅ Ping command received from {message.from_user.id}")
-    await message.answer("🏓 Pong!")
-
-@dp.message()
-async def echo_all(message: types.Message):
-    logger.info(f"✅ Echo: {message.text} from {message.from_user.id}")
-    await message.answer(f"Получено: {message.text}")
+# Обработчики команд зарегистрированы в роутерах
+# ВАЖНО: Не добавляем @dp.message() здесь, чтобы не перехватывать сообщения
 
 async def on_startup():
     logger.info("Starting Benefon Bot...")
