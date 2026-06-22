@@ -10,7 +10,7 @@ services:
     startCommand: python main.py
     envVars:
       - key: BOT_TOKEN
-        value: 8809330620:AAHRWqJi2jInel9tjtjnZ5WwlEktargENYY
+        value: 8809330620:AAHGlFufsi1Eoz0HjXRvabumAzNo01Eg1R8
       - key: DATABASE_URL
         value: postgresql://neondb_owner:npg_t7iEC1loVAIX@ep-delicate-fog-aoiuu6q0.c-2.ap-southeast-1.aws.neon.tech/neondb
       - key: LOCAL_DEBUG
