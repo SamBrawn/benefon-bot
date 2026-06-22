@@ -136,6 +136,10 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("PORT", 10000))
     host = os.getenv("WEB_SERVER_HOST", "0.0.0.0")
-    # ⚠️ Передаём ОБЪЕКТ app, а не строку "main:app"!
+    
+    logger.info(f"Starting server on {host}:{port}...")
+    # Передаём ОБЪЕКТ app, а не строку "main:app"!
     # Это предотвращает двойной импорт main.py и ошибку "Router is already attached"
     uvicorn.run(app, host=host, port=port, log_level="info")
+    
+    # Важно: Render сканирует порт 10000, связка через app объект
