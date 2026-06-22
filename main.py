@@ -73,16 +73,33 @@ async def global_exception_handler(request: Request, exc: Exception):
     return Response(content=json.dumps({"ok": False, "error": str(exc)}), status_code=200)
 
 
+@app.get("/webhook")
+async def webhook_get(request: Request):
+    """Диагностический GET-эндпоинт для проверки доступности webhook"""
+    return {
+        "ok": True,
+        "method": "GET",
+        "message": "Webhook endpoint is active. Use POST for Telegram updates.",
+        "webhook_url": f"{settings.WEBHOOK_URL}/webhook",
+        "bot_token": settings.BOT_TOKEN[:10] + "..."
+    }
+
+
 @app.post("/webhook")
 async def webhook(request: Request):
+    """Принимает POST-запросы от Telegram (webhook)"""
     try:
         body = await request.body()
         if not body:
+            logger.warning("Empty webhook request body")
             return {"ok": False, "error": "Empty body"}
+        
         update_data = json.loads(body)
+        logger.debug(f"Received update: {update_data.get('update_id', 'unknown')}")
         update = types.Update(**update_data)
         asyncio.create_task(safe_feed_update(update))
         return {"ok": True}
+        
     except json.JSONDecodeError as e:
         logger.error(f"JSON decode error: {e}")
         return {"ok": False, "error": "Invalid JSON"}
