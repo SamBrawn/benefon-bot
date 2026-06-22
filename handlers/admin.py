@@ -32,9 +32,10 @@ class EditUserStates(StatesGroup):
     waiting_for_new_object = State()
 
 
-# === /add_user — добавление пользователя (только владелец) ===
-@router.message(Command("add_user"))
+# === /adduser — добавление пользователя (только владелец) ===
+@router.message(Command("adduser"))
 async def cmd_add_user(message: types.Message, state: FSMContext):
+    await state.clear()
     async for session in get_db():
         result = await session.execute(
             select(User).where(User.telegram_id == message.from_user.id)
@@ -124,9 +125,10 @@ async def process_role(message: types.Message, state: FSMContext):
         await state.clear()
 
 
-# === /add_object — добавление объекта (только владелец) ===
-@router.message(Command("add_object"))
+# === /addobject — добавление объекта (только владелец) ===
+@router.message(Command("addobject"))
 async def cmd_add_object(message: types.Message, state: FSMContext):
+    await state.clear()
     async for session in get_db():
         result = await session.execute(
             select(User).where(User.telegram_id == message.from_user.id)
@@ -173,9 +175,10 @@ async def process_object_address(message: types.Message, state: FSMContext):
         await state.clear()
 
 
-# === /owner_approve — утверждение заявки владельцем ===
-@router.message(Command("owner_approve"))
-async def cmd_owner_approve(message: types.Message):
+# === /ownerapprove — утверждение заявки владельцем ===
+@router.message(Command("ownerapprove"))
+async def cmd_owner_approve(message: types.Message, state: FSMContext):
+    await state.clear()
     args = message.text.split()
     if len(args) < 2:
         await message.answer("❌ Использование: /owner_approve [ID заявки]")
@@ -212,9 +215,10 @@ async def cmd_owner_approve(message: types.Message):
         await message.answer(f"✅ Заявка #{order_id} утверждена владельцем!")
 
 
-# === /full_report — расширенный отчёт (для владельца) ===
-@router.message(Command("full_report"))
-async def cmd_full_report(message: types.Message):
+# === /fullreport — расширенный отчёт (для владельца) ===
+@router.message(Command("fullreport"))
+async def cmd_full_report(message: types.Message, state: FSMContext):
+    await state.clear()
     async for session in get_db():
         user = await session.execute(
             select(User).where(User.telegram_id == message.from_user.id)
@@ -248,9 +252,10 @@ async def cmd_full_report(message: types.Message):
         )
 
 
-# === /gen_report — отчёт (для гендира) ===
-@router.message(Command("gen_report"))
-async def cmd_gen_report(message: types.Message):
+# === /genreport — отчёт (для гендира) ===
+@router.message(Command("genreport"))
+async def cmd_gen_report(message: types.Message, state: FSMContext):
+    await state.clear()
     async for session in get_db():
         user = await session.execute(
             select(User).where(User.telegram_id == message.from_user.id)
@@ -280,8 +285,9 @@ async def cmd_gen_report(message: types.Message):
 
 
 # ========== ПРОСМОТР СОТРУДНИКОВ ==========
-@router.message(Command("list_users"))
-async def list_users(message: types.Message):
+@router.message(Command("listusers"))
+async def list_users(message: types.Message, state: FSMContext):
+    await state.clear()
     """Показывает список всех зарегистрированных сотрудников."""
     async for session in get_db():
         current_user = await session.execute(
@@ -320,8 +326,9 @@ async def list_users(message: types.Message):
 
 
 # ========== РЕДАКТИРОВАНИЕ СОТРУДНИКА ==========
-@router.message(Command("edit_user"))
+@router.message(Command("edituser"))
 async def edit_user_start(message: types.Message, state: FSMContext):
+    await state.clear()
     """Начинает процесс редактирования сотрудника."""
     async for session in get_db():
         current_user = await session.execute(
@@ -459,8 +466,9 @@ async def process_edit_object(message: types.Message, state: FSMContext):
 
 
 # ========== УДАЛЕНИЕ СОТРУДНИКА ==========
-@router.message(Command("delete_user"))
-async def delete_user(message: types.Message):
+@router.message(Command("deleteuser"))
+async def delete_user(message: types.Message, state: FSMContext):
+    await state.clear()
     """Удаляет сотрудника из системы."""
     async for session in get_db():
         current_user = await session.execute(

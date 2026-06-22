@@ -222,10 +222,10 @@ async def tools_button(message: types.Message):
 async def team_management(message: types.Message):
     await message.answer(
         "👥 *Управление командой*\n\n"
-        "/add_user — Добавить сотрудника\n"
-        "/list_users — Список всех сотрудников\n"
-        "/edit_user [ID] — Редактировать сотрудника\n"
-        "/delete_user [ID] — Удалить сотрудника",
+        "/adduser — Добавить сотрудника\n"
+        "/listusers — Список всех сотрудников\n"
+        "/edituser [ID] — Редактировать сотрудника\n"
+        "/deleteuser [ID] — Удалить сотрудника",
         parse_mode="Markdown"
     )
 
